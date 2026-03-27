@@ -22,6 +22,14 @@ models:
       neutral: neutral
       negative: negative
 
+  - name: nrc
+    type: ml
+    url: http://nrc:8000
+    labels:
+      positive: positive
+      negative: negative
+      neutral: neutral
+
   - name: vader
     type: ml
     url: http://vader:8000

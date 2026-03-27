@@ -2,7 +2,7 @@
 
 A full-stack sentiment analysis playground. Enter text and all configured models run against it simultaneously — results are returned side-by-side with label, confidence score, and inference latency per model.
 
-Stack: FastAPI · HuggingFace Transformers · NLTK VADER · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
+Stack: FastAPI · HuggingFace Transformers · NLTK VADER · NRC Emotion Lexicon · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
 
 ---
 
@@ -70,7 +70,8 @@ Default models:
 | `siebert/sentiment-roberta-large-english` | `siebert` | RoBERTa, 2-class, best for formal English |
 | `cardiffnlp/twitter-roberta-base-sentiment-latest` | `cardiffnlp` | RoBERTa, 3-class, Twitter-trained |
 | `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | `distilbert` | DistilBERT, 3-class, multilingual |
-| `vader` | `vader` | Lexicon-based, 3-class, rule-based — fast, no GPU, tiny image |
+| `nrc` | `nrc` | NRC Emotion Lexicon — emotion scores aggregated to 3-class, no GPU, tiny image |
+| `vader` | `vader` | VADER lexicon — rule-based, 3-class, fast, no GPU, tiny image |
 | `ProsusAI/finbert` | `finbert` | BERT, 3-class, finance domain |
 | `nlptown/bert-base-multilingual-uncased-sentiment` | `nlptown` | BERT, 5-star → 3-class, multilingual |
 | `vllm` | host / `vllm` | Qwen2.5-0.5B-Instruct via mlx-lm (macOS) or vLLM container (Linux) |
@@ -96,6 +97,7 @@ Response:
     { "model": "siebert/sentiment-roberta-large-english",                        "label": "positive", "score": 0.9987, "latency_s": 0.31,  "error": null },
     { "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",               "label": "positive", "score": 0.91,   "latency_s": 0.19,  "error": null },
     { "model": "lxyuan/distilbert-base-multilingual-cased-sentiments-student",   "label": "positive", "score": 0.87,   "latency_s": 0.14,  "error": null },
+    { "model": "nrc",                                                             "label": "positive", "score": 0.75,   "latency_s": 0.001, "error": null },
     { "model": "vader",                                                           "label": "positive", "score": 0.72,   "latency_s": 0.001, "error": null },
     { "model": "ProsusAI/finbert",                                                "label": "positive", "score": 0.95,   "latency_s": 0.21,  "error": null },
     { "model": "nlptown/bert-base-multilingual-uncased-sentiment",                "label": "positive", "score": 0.68,   "latency_s": 0.18,  "error": null },
@@ -168,6 +170,11 @@ model_server/
                               Loads model at startup, runs warmup inference
   Dockerfile                  python:3.12-slim + torch + transformers
   Dockerfile.vllm             vllm/vllm-openai image (Linux only)
+
+nrc_server/
+  server.py                   FastAPI NRC server — emotion scores aggregated to sentiment
+                              positive emotions (joy/trust/anticipation/surprise) vs negative
+  Dockerfile                  python:3.12-slim + nrclex only (~150 MB image)
 
 vader_server/
   server.py                   FastAPI VADER server — lexicon-based, no torch

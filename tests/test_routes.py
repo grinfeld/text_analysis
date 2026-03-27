@@ -6,7 +6,7 @@ import respx
 
 
 def _mock_all(siebert_label="POSITIVE", siebert_score=0.95):
-    """Register respx mocks for all 7 models in config.yaml order."""
+    """Register respx mocks for all 8 models in config.yaml order."""
     content = json.dumps({"label": "positive", "score": 0.88})
     respx.post("http://siebert:8000/predict").mock(
         return_value=httpx.Response(200, json={"label": siebert_label, "score": siebert_score})
@@ -16,6 +16,9 @@ def _mock_all(siebert_label="POSITIVE", siebert_score=0.95):
     )
     respx.post("http://distilbert:8000/predict").mock(
         return_value=httpx.Response(200, json={"label": "positive", "score": 0.75})
+    )
+    respx.post("http://nrc:8000/predict").mock(
+        return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
     )
     respx.post("http://vader:8000/predict").mock(
         return_value=httpx.Response(200, json={"label": "positive", "score": 0.91})
@@ -38,11 +41,12 @@ class TestAnalyseEndpoint:
         resp = client.post("/analyse", json={"text": "I love it!"})
         assert resp.status_code == 200
         results = resp.json()["results"]
-        assert len(results) == 7
+        assert len(results) == 8
         models = [r["model"] for r in results]
         assert "siebert/sentiment-roberta-large-english" in models
         assert "cardiffnlp/twitter-roberta-base-sentiment-latest" in models
         assert "lxyuan/distilbert-base-multilingual-cased-sentiments-student" in models
+        assert "nrc" in models
         assert "vader" in models
         assert "ProsusAI/finbert" in models
         assert "nlptown/bert-base-multilingual-uncased-sentiment" in models
@@ -71,6 +75,9 @@ class TestAnalyseEndpoint:
         respx.post("http://distilbert:8000/predict").mock(
             return_value=httpx.Response(200, json={"label": "positive", "score": 0.75})
         )
+        respx.post("http://nrc:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
+        )
         respx.post("http://vader:8000/predict").mock(
             return_value=httpx.Response(200, json={"label": "positive", "score": 0.91})
         )
@@ -87,7 +94,7 @@ class TestAnalyseEndpoint:
         resp = client.post("/analyse", json={"text": "Great!"})
         assert resp.status_code == 200
         results = resp.json()["results"]
-        assert len(results) == 7
+        assert len(results) == 8
         siebert = next(r for r in results if r["model"] == "siebert/sentiment-roberta-large-english")
         assert siebert["error"] is not None
         assert siebert["label"] is None
@@ -101,6 +108,7 @@ class TestAnalyseEndpoint:
             "siebert/sentiment-roberta-large-english",
             "cardiffnlp/twitter-roberta-base-sentiment-latest",
             "lxyuan/distilbert-base-multilingual-cased-sentiments-student",
+            "nrc",
             "vader",
             "ProsusAI/finbert",
             "nlptown/bert-base-multilingual-uncased-sentiment",

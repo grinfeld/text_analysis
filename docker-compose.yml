@@ -47,6 +47,16 @@ services:
       retries: 10
       start_period: 120s
 
+  nrc:
+    build:
+      context: ./nrc_server
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
   vader:
     build:
       context: ./vader_server
@@ -139,6 +149,8 @@ services:
       cardiffnlp:
         condition: service_healthy
       distilbert:
+        condition: service_healthy
+      nrc:
         condition: service_healthy
       vader:
         condition: service_healthy
