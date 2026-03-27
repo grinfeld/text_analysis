@@ -22,6 +22,32 @@ models:
       neutral: neutral
       negative: negative
 
+  - name: vader
+    type: ml
+    url: http://vader:8000
+    labels:
+      positive: positive
+      negative: negative
+      neutral: neutral
+
+  - name: ProsusAI/finbert
+    type: ml
+    url: http://finbert:8000
+    labels:
+      positive: positive
+      negative: negative
+      neutral: neutral
+
+  - name: nlptown/bert-base-multilingual-uncased-sentiment
+    type: ml
+    url: http://nlptown:8000
+    labels:
+      "1 star": negative
+      "2 stars": negative
+      "3 stars": neutral
+      "4 stars": positive
+      "5 stars": positive
+
   - name: vllm
     type: llm
     url: ${VLLM_URL:-http://localhost:8900}

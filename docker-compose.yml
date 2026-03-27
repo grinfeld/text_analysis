@@ -47,6 +47,46 @@ services:
       retries: 10
       start_period: 120s
 
+  vader:
+    build:
+      context: ./vader_server
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  finbert:
+    build:
+      context: ./model_server
+    environment:
+      MODEL_NAME: ProsusAI/finbert
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  nlptown:
+    build:
+      context: ./model_server
+    environment:
+      MODEL_NAME: nlptown/bert-base-multilingual-uncased-sentiment
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
   # ── vLLM (linux profile only) ─────────────────────────────────────────────
 
   vllm:
@@ -99,6 +139,12 @@ services:
       cardiffnlp:
         condition: service_healthy
       distilbert:
+        condition: service_healthy
+      vader:
+        condition: service_healthy
+      finbert:
+        condition: service_healthy
+      nlptown:
         condition: service_healthy
 
   # ── Frontend (nginx) ──────────────────────────────────────────────────────
