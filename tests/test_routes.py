@@ -5,41 +5,40 @@ import pytest
 import respx
 
 
+def _mock_all(siebert_label="POSITIVE", siebert_score=0.95):
+    """Register respx mocks for all 4 models in config.yaml order."""
+    content = json.dumps({"label": "positive", "score": 0.88})
+    respx.post("http://siebert:8000/predict").mock(
+        return_value=httpx.Response(200, json={"label": siebert_label, "score": siebert_score})
+    )
+    respx.post("http://cardiffnlp:8000/predict").mock(
+        return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
+    )
+    respx.post("http://distilbert:8000/predict").mock(
+        return_value=httpx.Response(200, json={"label": "positive", "score": 0.75})
+    )
+    respx.post("http://localhost:8900/v1/chat/completions").mock(
+        return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+    )
+
+
 class TestAnalyseEndpoint:
     @respx.mock
     def test_all_models_returned(self, client):
-        content = json.dumps({"label": "positive", "score": 0.88})
-        vllm_body = {"choices": [{"message": {"content": content}}]}
-        respx.post("http://siebert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.95})
-        )
-        respx.post("http://cardiffnlp:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
-        )
-        respx.post("http://localhost:8900/v1/chat/completions").mock(
-            return_value=httpx.Response(200, json=vllm_body)
-        )
+        _mock_all()
         resp = client.post("/analyse", json={"text": "I love it!"})
         assert resp.status_code == 200
         results = resp.json()["results"]
-        assert len(results) == 3
+        assert len(results) == 4
         models = [r["model"] for r in results]
         assert "siebert/sentiment-roberta-large-english" in models
         assert "cardiffnlp/twitter-roberta-base-sentiment-latest" in models
+        assert "lxyuan/distilbert-base-multilingual-cased-sentiments-student" in models
         assert "vllm" in models
 
     @respx.mock
     def test_results_contain_label_score_latency(self, client):
-        respx.post("http://siebert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.95})
-        )
-        respx.post("http://cardiffnlp:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "neutral", "score": 0.60})
-        )
-        content = json.dumps({"label": "negative", "score": 0.72})
-        respx.post("http://localhost:8900/v1/chat/completions").mock(
-            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
-        )
+        _mock_all()
         resp = client.post("/analyse", json={"text": "Some text."})
         assert resp.status_code == 200
         for r in resp.json()["results"]:
@@ -57,6 +56,9 @@ class TestAnalyseEndpoint:
         respx.post("http://cardiffnlp:8000/predict").mock(
             return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
         )
+        respx.post("http://distilbert:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "positive", "score": 0.75})
+        )
         content = json.dumps({"label": "positive", "score": 0.88})
         respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
@@ -64,28 +66,20 @@ class TestAnalyseEndpoint:
         resp = client.post("/analyse", json={"text": "Great!"})
         assert resp.status_code == 200
         results = resp.json()["results"]
-        assert len(results) == 3
+        assert len(results) == 4
         siebert = next(r for r in results if r["model"] == "siebert/sentiment-roberta-large-english")
         assert siebert["error"] is not None
         assert siebert["label"] is None
 
     @respx.mock
     def test_results_in_config_order(self, client):
-        respx.post("http://siebert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.9})
-        )
-        respx.post("http://cardiffnlp:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.8})
-        )
-        content = json.dumps({"label": "positive", "score": 0.85})
-        respx.post("http://localhost:8900/v1/chat/completions").mock(
-            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
-        )
+        _mock_all()
         resp = client.post("/analyse", json={"text": "Nice."})
         models = [r["model"] for r in resp.json()["results"]]
         assert models == [
             "siebert/sentiment-roberta-large-english",
             "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "lxyuan/distilbert-base-multilingual-cased-sentiments-student",
             "vllm",
         ]
 

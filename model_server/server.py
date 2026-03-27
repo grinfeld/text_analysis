@@ -1,5 +1,6 @@
 import logging
 import os
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -17,7 +18,15 @@ logger.info("Loading model: %s", MODEL_NAME)
 _pipeline = pipeline("text-classification", model=MODEL_NAME, top_k=1)
 logger.info("Model loaded: %s", MODEL_NAME)
 
-app = FastAPI(title=f"Model Server — {MODEL_NAME}")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    _pipeline("warmup")
+    logger.info("Model warmed up: %s", MODEL_NAME)
+    yield
+
+
+app = FastAPI(title=f"Model Server — {MODEL_NAME}", lifespan=lifespan)
 
 
 class PredictRequest(BaseModel):

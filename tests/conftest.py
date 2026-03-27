@@ -8,8 +8,8 @@ from fastapi.testclient import TestClient
 
 from sentiment.observability import metrics
 
-# Point config loader at the test fixture before importing app
-os.environ.setdefault("CONFIG_PATH", str(Path(__file__).parent / "fixtures" / "config.yaml"))
+# Use the real config.yaml from the project root
+os.environ.setdefault("CONFIG_PATH", str(Path(__file__).parent.parent / "config.yaml"))
 
 from sentiment.main import app  # noqa: E402
 

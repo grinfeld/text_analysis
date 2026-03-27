@@ -1,6 +1,46 @@
 # Sentiment Analysis — Learning Project
 
-A full-stack sentiment analysis playground that runs all configured models against your text in one request and compares results side-by-side, with structured logging, OpenTelemetry metrics, and a Grafana dashboard.
+A full-stack sentiment analysis playground. Enter text and all configured models run against it simultaneously — results are returned side-by-side with label, confidence score, and inference latency per model.
+
+Stack: FastAPI · HuggingFace Transformers · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
+
+---
+
+## Quick Start
+
+### macOS / Apple Silicon
+
+The LLM runs natively via mlx-lm on the host (uses the Metal GPU). Start it first:
+
+```bash
+uv tool install mlx-lm
+mlx_lm.server --model mlx-community/Qwen2.5-0.5B-Instruct-4bit --port 8900
+```
+
+Then start the rest of the stack, pointing the backend at the host:
+
+```bash
+export LLM_URL=http://host.docker.internal:8900
+docker compose up --build
+```
+
+### Linux
+
+The LLM runs inside a Docker container via vLLM (CPU mode). Use the `linux` profile to include it:
+
+```bash
+docker compose --profile linux up --build
+```
+
+`LLM_URL` defaults to `http://vllm:8900` when not set, so no export needed.
+
+---
+
+First run downloads model weights — this can take several minutes. The backend waits for all three HuggingFace model containers to pass their healthchecks before starting.
+
+Model containers run a warmup inference at startup, so the first user request is not cold.
+
+---
 
 ## Services
 
@@ -10,56 +50,31 @@ A full-stack sentiment analysis playground that runs all configured models again
 | Backend API | http://localhost:8000 | FastAPI — `POST /analyse` |
 | Prometheus | http://localhost:9090 | Metrics scraper |
 | Grafana | http://localhost:3000 | Dashboard (admin / admin) |
-| mlx-lm | http://localhost:8900 | OpenAI-compatible API (host process) |
+| mlx-lm / vLLM | http://localhost:8900 | OpenAI-compatible LLM API |
+
+---
 
 ## Models
 
-Models are defined in `config.yaml` (or `config.macos.yaml` for macOS). Each entry has a `type`:
+Defined in `config.yaml`, loaded at backend startup. Two types:
 
-| Type | Class | Notes |
-|------|-------|-------|
-| `ml` | `ModelServerClient` | HuggingFace pipeline container |
-| `llm` | `VllmClient` | OpenAI-compatible completions endpoint |
+| Type | Implementation | Notes |
+|------|---------------|-------|
+| `ml` | `ModelServerClient` | Posts to a HuggingFace pipeline container |
+| `llm` | `VllmClient` | Posts to an OpenAI-compatible `/v1/chat/completions` endpoint |
 
 Default models:
 
-| Name | Container | Notes |
-|------|-----------|-------|
-| `siebert/sentiment-roberta-large-english` | `siebert` | Best for formal English, 2-class |
-| `cardiffnlp/twitter-roberta-base-sentiment-latest` | `cardiffnlp` | 3-class, Twitter-trained |
-| `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | `distilbert` | Multilingual, 3-class |
-| `vllm` | host (mlx-lm) | Qwen2.5-0.5B-Instruct via mlx-lm on port 8900 |
+| Name | Type | Notes |
+|------|------|-------|
+| `siebert/sentiment-roberta-large-english` | ml | 2-class, best for formal English |
+| `cardiffnlp/twitter-roberta-base-sentiment-latest` | ml | 3-class, Twitter-trained |
+| `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | ml | 3-class, multilingual |
+| `vllm` | llm | Qwen2.5-0.5B-Instruct — macOS via mlx-lm, Linux via vLLM container |
 
-## Quick Start
+The `url` field in `config.yaml` supports `${VAR:-default}` env var substitution. The vllm entry uses `${VLLM_URL:-http://localhost:8900}`, which the backend receives as the `VLLM_URL` env var set by Docker Compose from `LLM_URL`.
 
-### macOS / Apple Silicon
-
-mlx-lm runs natively on the host using the Metal GPU. Start it before the stack:
-
-```bash
-uv tool install mlx-lm
-mlx_lm.server --model mlx-community/Qwen2.5-0.5B-Instruct-4bit --port 8900
-```
-
-The first run downloads ~300 MB of model weights. Once the server is up, start the rest of the stack:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.macos.yml up --build
-```
-
-`docker-compose.macos.yml` mounts `config.macos.yaml` (which points the vllm entry at `host.docker.internal:8900`) instead of `config.yaml`. The vllm model row will show an error in the UI if mlx-lm is not running.
-
-If port 8900 is already in use, change `--port` in the mlx-lm command and update the `url` in `config.macos.yaml` to match.
-
-### Linux / GPU
-
-```bash
-docker compose up --build
-```
-
-First run downloads model weights — this can take several minutes. The backend waits for all model containers to pass their health checks before starting.
-
-> **Note:** The `vllm` model is macOS-only in this setup (served by mlx-lm). On Linux, the three HuggingFace models work normally; the vllm row will show an error unless you add a compatible container and update `config.yaml`.
+---
 
 ## API
 
@@ -67,9 +82,7 @@ First run downloads model weights — this can take several minutes. The backend
 POST /analyse
 Content-Type: application/json
 
-{
-  "text": "The product exceeded all my expectations."
-}
+{ "text": "The product exceeded all my expectations." }
 ```
 
 Response:
@@ -77,45 +90,53 @@ Response:
 ```json
 {
   "results": [
-    { "model": "siebert/sentiment-roberta-large-english", "label": "positive", "score": 0.9987, "latency_s": 0.312, "error": null },
-    { "model": "cardiffnlp/twitter-roberta-base-sentiment-latest", "label": "positive", "score": 0.91, "latency_s": 0.198, "error": null },
-    { "model": "lxyuan/distilbert-base-multilingual-cased-sentiments-student", "label": "positive", "score": 0.87, "latency_s": 0.145, "error": null },
-    { "model": "vllm", "label": "positive", "score": 0.85, "latency_s": 2.1, "error": null }
+    { "model": "siebert/sentiment-roberta-large-english",                        "label": "positive", "score": 0.9987, "latency_s": 0.31,  "error": null },
+    { "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",               "label": "positive", "score": 0.91,   "latency_s": 0.19,  "error": null },
+    { "model": "lxyuan/distilbert-base-multilingual-cased-sentiments-student",   "label": "positive", "score": 0.87,   "latency_s": 0.14,  "error": null },
+    { "model": "vllm",                                                            "label": "positive", "score": 0.85,   "latency_s": 2.1,   "error": null }
   ]
 }
 ```
 
-A model failure returns an `error` string for that entry and does not abort the rest.
+Models run sequentially in the order defined in `config.yaml`. A failed model returns `error: "<message>"` with `label`/`score` null — it does not abort the rest.
+
+---
 
 ## Configuration
 
-Models are loaded from `config.yaml` at startup. The path can be overridden with the `CONFIG_PATH` env var.
+`config.yaml` is mounted into the backend container at `/app/config.yaml`. Edit it to add, remove, or reorder models without rebuilding.
 
 ```yaml
 models:
   - name: my-model/name
-    type: ml          # ml | llm
-    url: http://host:port
-    labels:           # required for ml — raw label → normalised label
+    type: ml               # ml | llm
+    url: http://host:port  # supports ${VAR:-default}
+    labels:                # ml only — maps raw model output to canonical label
       POSITIVE: positive
       NEGATIVE: negative
-  - name: vllm
+
+  - name: my-llm
     type: llm
     url: http://host:port
-    model_id: model/name-on-hub
+    model_id: org/model-name-on-hub
 ```
 
-## Environment Variables (backend)
+---
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CONFIG_PATH` | `config.yaml` | Path to model config file |
-| `LOG_LEVEL` | `INFO` | Python log level |
-| `LOG_FORMAT` | `json` | `json` or `console` |
+## Environment Variables
+
+| Variable | Where set | Description |
+|----------|-----------|-------------|
+| `LLM_URL` | shell / export | URL of the LLM server, passed to the backend as `VLLM_URL` by Compose. Defaults to `http://vllm:8900`. Set to `http://host.docker.internal:8900` on macOS. |
+| `CONFIG_PATH` | shell / env | Path to `config.yaml`. Defaults to `config.yaml`. Useful in tests. |
+| `LOG_LEVEL` | `docker-compose.yml` | Python log level. Default: `INFO`. |
+| `LOG_FORMAT` | `docker-compose.yml` | `json` or `console`. Default: `json`. |
+
+---
 
 ## Metrics
 
-All metrics are emitted from inside each model client's `predict()` call.
+Emitted per model client inside `predict()`, not at the HTTP layer.
 
 | Metric | Type | Labels |
 |--------|------|--------|
@@ -124,41 +145,54 @@ All metrics are emitted from inside each model client's `predict()` call.
 | `sentiment_model_latency_seconds` | Histogram | `model`, `label` |
 | `sentiment_model_confidence_score` | Histogram | `model`, `label` |
 
-Prometheus scrapes `http://backend:8000/metrics` every 15 s.
+Prometheus scrapes `http://backend:8000/metrics` every 15 s. The Grafana dashboard ("Sentiment Analysis") is pre-provisioned — no manual setup needed.
 
-The Grafana dashboard ("Sentiment Analysis") is pre-provisioned at http://localhost:3000 — no manual setup needed.
+---
 
 ## Project Structure
 
 ```
-config.yaml               Model definitions (Linux/default)
-config.macos.yaml         Model definitions (macOS — vllm points to host)
+config.yaml                   Model definitions (edit to add/remove models)
 
-src/sentiment/
-  main.py               FastAPI app, lifespan, CORS, /metrics
-  config.py             Settings + load_model_configs() YAML loader
-  registry.py           Builds clients from config at startup
-  api/routes.py         POST /analyse endpoint
-  clients/
-    base.py             SentimentClient ABC + metrics wrapping
-    model_server.py     ModelServerClient (HF containers)
-    vllm.py             VllmClient (OpenAI-compat)
-  observability/
-    logging.py          structlog configuration
-    metrics.py          OTEL MeterProvider + 4 instruments
+Dockerfile                    Backend image (FastAPI, uv)
+docker-compose.yml            All services; vllm under [linux] profile
 
 model_server/
-  server.py             Tiny FastAPI app wrapping HF pipeline
-  Dockerfile            python:3.12-slim + torch (CPU) + transformers
+  server.py                   FastAPI wrapper around HuggingFace pipeline
+                              Loads model at startup, runs warmup inference
+  Dockerfile                  python:3.12-slim + torch + transformers
+  Dockerfile.vllm             vllm/vllm-openai image (Linux only)
+
+src/sentiment/
+  main.py                     App factory, lifespan, CORS, /metrics
+  config.py                   Settings + load_model_configs() with env var expansion
+  registry.py                 Builds clients from config.yaml at startup
+  api/routes.py               POST /analyse
+  clients/
+    base.py                   SentimentClient ABC + metrics + timing
+    model_server.py           ModelServerClient (HuggingFace containers)
+    vllm.py                   VllmClient (OpenAI-compatible)
+  observability/
+    logging.py                structlog (JSON or console)
+    metrics.py                OTEL MeterProvider + Prometheus exporter
 
 frontend/
-  static/index.html     Single-page UI — text field + results table
-  nginx.conf            Static serving + /analyse proxy
+  static/index.html           Single-page UI — textarea + results table
+  nginx.conf                  Static files + /analyse proxy to backend
 
 observability/
   prometheus.yml
-  grafana/              Provisioned datasource + dashboard
+  grafana/                    Pre-provisioned datasource + dashboard
+
+tests/
+  fixtures/config.yaml        Test model config (3 models, mocked URLs)
+  conftest.py                 Fixtures: TestClient, metrics setup, CONFIG_PATH
+  test_routes.py              /analyse endpoint tests
+  test_clients.py             ModelServerClient + VllmClient unit tests
+  test_integration.py         Testcontainers — real model_server container
 ```
+
+---
 
 ## Development
 
