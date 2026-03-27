@@ -59,4 +59,4 @@ models:
   - name: vllm
     type: llm
     url: ${VLLM_URL:-http://localhost:8900}
-    model_id: mlx-community/Qwen2.5-0.5B-Instruct-4bit
+    model_id: mlx-community/Qwen2.5-7B-Instruct-4bit
