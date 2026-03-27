@@ -1,7 +1,7 @@
 [project]
 name = "sentiment"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sentiment analysis learning project — FastAPI + HuggingFace models + vLLM + OTEL + Grafana"
 readme = "README.md"
 authors = [
     { name = "Michael Grinfeld", email = "michaelgr+dream@dreamgroup.com" }
@@ -11,6 +11,12 @@ dependencies = [
     "fastapi>=0.135.2",
     "httpx>=0.28.1",
     "uvicorn[standard]>=0.42.0",
+    "structlog>=25.1.0",
+    "opentelemetry-api>=1.27.0",
+    "opentelemetry-sdk>=1.27.0",
+    "opentelemetry-exporter-prometheus>=0.50b0",
+    "prometheus-client>=0.20.0",
+    "pydantic-settings>=2.0.0",
 ]
 
 [build-system]
@@ -20,6 +26,9 @@ build-backend = "uv_build"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+filterwarnings = [
+    "ignore::DeprecationWarning:testcontainers",
+]
 
 [tool.uv]
 package = true
@@ -28,4 +37,6 @@ package = true
 dev = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "respx>=0.22.0",
+    "testcontainers>=4.8.0",
 ]
