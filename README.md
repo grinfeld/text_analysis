@@ -2,7 +2,7 @@
 
 A full-stack sentiment analysis playground. Enter text and all configured models run against it simultaneously — results are returned side-by-side with label, confidence score, and inference latency per model.
 
-Stack: FastAPI · HuggingFace Transformers · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
+Stack: FastAPI · HuggingFace Transformers · NLTK VADER · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
 
 ---
 
@@ -36,7 +36,7 @@ docker compose --profile linux up --build
 
 ---
 
-First run downloads model weights — this can take several minutes. The backend waits for all three HuggingFace model containers to pass their healthchecks before starting.
+First run downloads model weights — this can take several minutes. The backend waits for all model containers to pass their healthchecks before starting. VADER starts in seconds; neural models take longer.
 
 Model containers run a warmup inference at startup, so the first user request is not cold.
 
@@ -60,17 +60,20 @@ Defined in `config.yaml`, loaded at backend startup. Two types:
 
 | Type | Implementation | Notes |
 |------|---------------|-------|
-| `ml` | `ModelServerClient` | Posts to a HuggingFace pipeline container |
+| `ml` | `ModelServerClient` | Posts to a `/predict` HTTP endpoint |
 | `llm` | `VllmClient` | Posts to an OpenAI-compatible `/v1/chat/completions` endpoint |
 
 Default models:
 
-| Name | Type | Notes |
-|------|------|-------|
-| `siebert/sentiment-roberta-large-english` | ml | 2-class, best for formal English |
-| `cardiffnlp/twitter-roberta-base-sentiment-latest` | ml | 3-class, Twitter-trained |
-| `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | ml | 3-class, multilingual |
-| `vllm` | llm | Qwen2.5-0.5B-Instruct — macOS via mlx-lm, Linux via vLLM container |
+| Name | Container | Notes |
+|------|-----------|-------|
+| `siebert/sentiment-roberta-large-english` | `siebert` | RoBERTa, 2-class, best for formal English |
+| `cardiffnlp/twitter-roberta-base-sentiment-latest` | `cardiffnlp` | RoBERTa, 3-class, Twitter-trained |
+| `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | `distilbert` | DistilBERT, 3-class, multilingual |
+| `vader` | `vader` | Lexicon-based, 3-class, rule-based — fast, no GPU, tiny image |
+| `ProsusAI/finbert` | `finbert` | BERT, 3-class, finance domain |
+| `nlptown/bert-base-multilingual-uncased-sentiment` | `nlptown` | BERT, 5-star → 3-class, multilingual |
+| `vllm` | host / `vllm` | Qwen2.5-0.5B-Instruct via mlx-lm (macOS) or vLLM container (Linux) |
 
 The `url` field in `config.yaml` supports `${VAR:-default}` env var substitution. The vllm entry uses `${VLLM_URL:-http://localhost:8900}`, which the backend receives as the `VLLM_URL` env var set by Docker Compose from `LLM_URL`.
 
@@ -93,6 +96,9 @@ Response:
     { "model": "siebert/sentiment-roberta-large-english",                        "label": "positive", "score": 0.9987, "latency_s": 0.31,  "error": null },
     { "model": "cardiffnlp/twitter-roberta-base-sentiment-latest",               "label": "positive", "score": 0.91,   "latency_s": 0.19,  "error": null },
     { "model": "lxyuan/distilbert-base-multilingual-cased-sentiments-student",   "label": "positive", "score": 0.87,   "latency_s": 0.14,  "error": null },
+    { "model": "vader",                                                           "label": "positive", "score": 0.72,   "latency_s": 0.001, "error": null },
+    { "model": "ProsusAI/finbert",                                                "label": "positive", "score": 0.95,   "latency_s": 0.21,  "error": null },
+    { "model": "nlptown/bert-base-multilingual-uncased-sentiment",                "label": "positive", "score": 0.68,   "latency_s": 0.18,  "error": null },
     { "model": "vllm",                                                            "label": "positive", "score": 0.85,   "latency_s": 2.1,   "error": null }
   ]
 }
@@ -163,6 +169,11 @@ model_server/
   Dockerfile                  python:3.12-slim + torch + transformers
   Dockerfile.vllm             vllm/vllm-openai image (Linux only)
 
+vader_server/
+  server.py                   FastAPI VADER server — lexicon-based, no torch
+                              Compound score → positive/neutral/negative
+  Dockerfile                  python:3.12-slim + nltk only (~150 MB image)
+
 src/sentiment/
   main.py                     App factory, lifespan, CORS, /metrics
   config.py                   Settings + load_model_configs() with env var expansion
@@ -185,8 +196,7 @@ observability/
   grafana/                    Pre-provisioned datasource + dashboard
 
 tests/
-  fixtures/config.yaml        Test model config (3 models, mocked URLs)
-  conftest.py                 Fixtures: TestClient, metrics setup, CONFIG_PATH
+  conftest.py                 Fixtures: TestClient, metrics setup, CONFIG_PATH → config.yaml
   test_routes.py              /analyse endpoint tests
   test_clients.py             ModelServerClient + VllmClient unit tests
   test_integration.py         Testcontainers — real model_server container
