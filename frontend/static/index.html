@@ -23,7 +23,7 @@
       box-shadow: 0 2px 12px rgba(0,0,0,0.1);
       padding: 2rem;
       width: 100%;
-      max-width: 640px;
+      max-width: 680px;
     }
 
     h1 {
@@ -41,7 +41,7 @@
       margin-bottom: 0.4rem;
     }
 
-    select, textarea {
+    textarea {
       width: 100%;
       padding: 0.6rem 0.8rem;
       border: 1px solid #d1d5db;
@@ -52,11 +52,12 @@
       margin-bottom: 1rem;
       outline: none;
       transition: border-color 0.15s;
+      resize: vertical;
+      min-height: 120px;
+      font-family: inherit;
     }
 
-    select:focus, textarea:focus { border-color: #6366f1; }
-
-    textarea { resize: vertical; min-height: 120px; font-family: inherit; }
+    textarea:focus { border-color: #6366f1; }
 
     button {
       width: 100%;
@@ -74,34 +75,59 @@
     button:hover:not(:disabled) { background: #4f46e5; }
     button:disabled { background: #a5b4fc; cursor: not-allowed; }
 
-    #result {
+    #results {
       margin-top: 1.5rem;
-      padding: 1rem 1.2rem;
-      border-radius: 8px;
       display: none;
     }
 
-    #result.positive { background: #f0fdf4; border: 1px solid #86efac; }
-    #result.negative { background: #fef2f2; border: 1px solid #fca5a5; }
-    #result.neutral  { background: #f8fafc; border: 1px solid #cbd5e1; }
-    #result.error    { background: #fff7ed; border: 1px solid #fdba74; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
 
-    .result-label {
-      font-size: 1.25rem;
-      font-weight: 700;
+    thead th {
+      text-align: left;
+      font-weight: 600;
+      color: #555;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      padding: 0 0.6rem 0.6rem;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    tbody tr + tr td { border-top: 1px solid #f3f4f6; }
+
+    tbody td {
+      padding: 0.65rem 0.6rem;
+      vertical-align: middle;
+    }
+
+    .model-name {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      font-size: 0.8rem;
+      color: #374151;
+      word-break: break-all;
+    }
+
+    .label-badge {
+      display: inline-block;
+      padding: 0.2rem 0.55rem;
+      border-radius: 9999px;
+      font-weight: 600;
+      font-size: 0.8rem;
       text-transform: capitalize;
     }
 
-    .result-label.positive { color: #16a34a; }
-    .result-label.negative { color: #dc2626; }
-    .result-label.neutral  { color: #475569; }
-    .result-label.error    { color: #ea580c; }
+    .label-badge.positive { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
+    .label-badge.negative { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
+    .label-badge.neutral  { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
+    .label-badge.error    { background: #fff7ed; color: #ea580c; border: 1px solid #fdba74; }
 
-    .result-score {
-      font-size: 0.85rem;
-      color: #666;
-      margin-top: 0.25rem;
-    }
+    .score { color: #374151; }
+    .latency { color: #9ca3af; font-size: 0.82rem; }
+    .error-msg { color: #ea580c; font-size: 0.82rem; }
 
     .spinner {
       display: inline-block;
@@ -121,82 +147,90 @@
   <div class="card">
     <h1>Sentiment Analysis</h1>
 
-    <label for="model-select">Model</label>
-    <select id="model-select">
-      <option value="siebert/sentiment-roberta-large-english">siebert/sentiment-roberta-large-english</option>
-      <option value="cardiffnlp/twitter-roberta-base-sentiment-latest">cardiffnlp/twitter-roberta-base-sentiment-latest</option>
-      <option value="lxyuan/distilbert-base-multilingual-cased-sentiments-student">lxyuan/distilbert-base-multilingual-cased-sentiments-student</option>
-      <option value="vllm">vLLM (Qwen2.5-0.5B-Instruct)</option>
-    </select>
-
     <label for="text-input">Text</label>
     <textarea id="text-input" placeholder="Enter text to analyse…"></textarea>
 
-    <button id="submit-btn" onclick="classify()">Analyse</button>
+    <button id="submit-btn" onclick="analyse()">Analyse</button>
 
-    <div id="result">
-      <div class="result-label" id="result-label"></div>
-      <div class="result-score" id="result-score"></div>
+    <div id="results">
+      <table>
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th>Label</th>
+            <th>Confidence</th>
+            <th>Latency</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
     </div>
   </div>
 
   <script>
-    async function classify() {
-      const model = document.getElementById("model-select").value;
+    async function analyse() {
       const text = document.getElementById("text-input").value.trim();
       const btn = document.getElementById("submit-btn");
-      const resultDiv = document.getElementById("result");
-      const labelEl = document.getElementById("result-label");
-      const scoreEl = document.getElementById("result-score");
+      const resultsDiv = document.getElementById("results");
+      const tbody = document.getElementById("results-body");
 
       if (!text) {
-        showResult("error", "Please enter some text.", "");
+        tbody.innerHTML = `<tr><td colspan="4" class="error-msg" style="padding:0.65rem 0.6rem">Please enter some text.</td></tr>`;
+        resultsDiv.style.display = "block";
         return;
       }
 
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>Analysing…';
-      resultDiv.style.display = "none";
+      resultsDiv.style.display = "none";
+      tbody.innerHTML = "";
 
       try {
-        const resp = await fetch("/sentiment", {
+        const resp = await fetch("/analyse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ model, text }),
+          body: JSON.stringify({ text }),
         });
 
         if (!resp.ok) {
           const err = await resp.json().catch(() => ({ detail: resp.statusText }));
-          showResult("error", "Error: " + (err.detail || resp.statusText), "");
+          tbody.innerHTML = `<tr><td colspan="4" class="error-msg" style="padding:0.65rem 0.6rem">Error: ${err.detail || resp.statusText}</td></tr>`;
+          resultsDiv.style.display = "block";
           return;
         }
 
         const data = await resp.json();
-        const pct = (data.score * 100).toFixed(1);
-        showResult(data.label, data.label, `Confidence: ${pct}% · Model: ${data.model}`);
+        tbody.innerHTML = data.results.map(r => renderRow(r)).join("");
+        resultsDiv.style.display = "block";
       } catch (err) {
-        showResult("error", "Network error: " + err.message, "");
+        tbody.innerHTML = `<tr><td colspan="4" class="error-msg" style="padding:0.65rem 0.6rem">Network error: ${err.message}</td></tr>`;
+        resultsDiv.style.display = "block";
       } finally {
         btn.disabled = false;
         btn.textContent = "Analyse";
       }
     }
 
-    function showResult(cssClass, label, score) {
-      const resultDiv = document.getElementById("result");
-      const labelEl = document.getElementById("result-label");
-      const scoreEl = document.getElementById("result-score");
-
-      resultDiv.className = cssClass;
-      resultDiv.style.display = "block";
-      labelEl.className = "result-label " + cssClass;
-      labelEl.textContent = label;
-      scoreEl.textContent = score;
+    function renderRow(r) {
+      if (r.error) {
+        return `<tr>
+          <td><span class="model-name">${r.model}</span></td>
+          <td><span class="label-badge error">error</span></td>
+          <td colspan="2"><span class="error-msg">${r.error}</span></td>
+        </tr>`;
+      }
+      const pct = (r.score * 100).toFixed(1) + "%";
+      const ms = (r.latency_s * 1000).toFixed(0) + " ms";
+      return `<tr>
+        <td><span class="model-name">${r.model}</span></td>
+        <td><span class="label-badge ${r.label}">${r.label}</span></td>
+        <td class="score">${pct}</td>
+        <td class="latency">${ms}</td>
+      </tr>`;
     }
 
-    // Allow Ctrl+Enter to submit
     document.getElementById("text-input").addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) classify();
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) analyse();
     });
   </script>
 </body>

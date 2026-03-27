@@ -1,60 +1,102 @@
+import json
+
 import httpx
 import pytest
 import respx
 
 
-class TestSentimentEndpoint:
+class TestAnalyseEndpoint:
     @respx.mock
-    def test_valid_hf_model(self, client):
+    def test_all_models_returned(self, client):
+        content = json.dumps({"label": "positive", "score": 0.88})
+        vllm_body = {"choices": [{"message": {"content": content}}]}
         respx.post("http://siebert:8000/predict").mock(
             return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.95})
         )
-        resp = client.post(
-            "/sentiment",
-            json={"model": "siebert/sentiment-roberta-large-english", "text": "I love it!"},
-        )
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["label"] == "positive"
-        assert data["score"] == pytest.approx(0.95)
-        assert data["model"] == "siebert/sentiment-roberta-large-english"
-
-    @respx.mock
-    def test_valid_vllm_model(self, client):
-        import json
-        content = json.dumps({"label": "negative", "score": 0.88})
-        body = {"choices": [{"message": {"content": content}}]}
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
-            return_value=httpx.Response(200, json=body)
-        )
-        resp = client.post("/sentiment", json={"model": "vllm", "text": "Terrible experience."})
-        assert resp.status_code == 200
-        assert resp.json()["label"] == "negative"
-
-    def test_unknown_model_returns_400(self, client):
-        resp = client.post("/sentiment", json={"model": "nonexistent/model", "text": "hello"})
-        assert resp.status_code == 400
-        assert "Unknown model" in resp.json()["detail"]
-
-    @respx.mock
-    def test_model_server_down_returns_502(self, client):
         respx.post("http://cardiffnlp:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
+        )
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=vllm_body)
+        )
+        resp = client.post("/analyse", json={"text": "I love it!"})
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        assert len(results) == 3
+        models = [r["model"] for r in results]
+        assert "siebert/sentiment-roberta-large-english" in models
+        assert "cardiffnlp/twitter-roberta-base-sentiment-latest" in models
+        assert "vllm" in models
+
+    @respx.mock
+    def test_results_contain_label_score_latency(self, client):
+        respx.post("http://siebert:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.95})
+        )
+        respx.post("http://cardiffnlp:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "neutral", "score": 0.60})
+        )
+        content = json.dumps({"label": "negative", "score": 0.72})
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        )
+        resp = client.post("/analyse", json={"text": "Some text."})
+        assert resp.status_code == 200
+        for r in resp.json()["results"]:
+            assert "model" in r
+            assert "latency_s" in r
+            assert r.get("error") is None
+            assert r["label"] in ("positive", "neutral", "negative")
+            assert 0.0 <= r["score"] <= 1.0
+
+    @respx.mock
+    def test_failed_model_does_not_abort_response(self, client):
+        respx.post("http://siebert:8000/predict").mock(
             side_effect=httpx.ConnectError("connection refused")
         )
-        resp = client.post(
-            "/sentiment",
-            json={"model": "cardiffnlp/twitter-roberta-base-sentiment-latest", "text": "hello"},
+        respx.post("http://cardiffnlp:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
         )
-        assert resp.status_code == 502
+        content = json.dumps({"label": "positive", "score": 0.88})
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        )
+        resp = client.post("/analyse", json={"text": "Great!"})
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        assert len(results) == 3
+        siebert = next(r for r in results if r["model"] == "siebert/sentiment-roberta-large-english")
+        assert siebert["error"] is not None
+        assert siebert["label"] is None
 
-    def test_missing_fields_returns_422(self, client):
-        resp = client.post("/sentiment", json={"model": "vllm"})
+    @respx.mock
+    def test_results_in_config_order(self, client):
+        respx.post("http://siebert:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.9})
+        )
+        respx.post("http://cardiffnlp:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "positive", "score": 0.8})
+        )
+        content = json.dumps({"label": "positive", "score": 0.85})
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        )
+        resp = client.post("/analyse", json={"text": "Nice."})
+        models = [r["model"] for r in resp.json()["results"]]
+        assert models == [
+            "siebert/sentiment-roberta-large-english",
+            "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "vllm",
+        ]
+
+    def test_empty_text_returns_422(self, client):
+        resp = client.post("/analyse", json={"text": ""})
         assert resp.status_code == 422
 
-    def test_empty_text_returns_422_not_502(self, client):
-        resp = client.post("/sentiment", json={"model": "vllm", "text": ""})
+    def test_whitespace_text_returns_422(self, client):
+        resp = client.post("/analyse", json={"text": "   "})
         assert resp.status_code == 422
 
-    def test_whitespace_only_text_returns_422(self, client):
-        resp = client.post("/sentiment", json={"model": "vllm", "text": "   "})
+    def test_missing_text_returns_422(self, client):
+        resp = client.post("/analyse", json={})
         assert resp.status_code == 422

@@ -14,9 +14,12 @@ unavailable (e.g. in a CI environment without a Docker daemon).
 """
 
 import os
+import platform
+from pathlib import Path
 
 import httpx
 import pytest
+import yaml
 from fastapi.testclient import TestClient
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
@@ -30,11 +33,15 @@ from sentiment.clients.model_server import ModelServerClient
 # ---------------------------------------------------------------------------
 TINY_MODEL = "hf-internal-testing/tiny-random-RobertaForSequenceClassification"
 
-# Label map for the tiny model's raw output
 TINY_LABEL_MAP = {"LABEL_0": "negative", "LABEL_1": "positive"}
 
-# Path to the built model_server image context
 _MODEL_SERVER_CONTEXT = os.path.join(os.path.dirname(__file__), "..", "model_server")
+
+# LLM_URL set based on OS — matches what .env / docker-compose.yml does at runtime.
+# macOS: mlx-lm runs on the host (localhost from test process perspective).
+# Linux: vllm container is started via --profile linux, reachable at localhost:8900.
+_IS_MACOS = platform.system() == "Darwin"
+_LLM_URL = "http://localhost:8900"  # same on both: tests run on the host, not inside Docker
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +79,6 @@ def model_server_container():
         .with_exposed_ports(8000)
     )
 
-    # Build the image from the model_server directory
     import docker as docker_sdk
 
     client = docker_sdk.from_env()
@@ -92,7 +98,6 @@ def model_server_url(model_server_container) -> str:
 
 @pytest.fixture
 def hf_integration_client(model_server_url) -> ModelServerClient:
-    # Function-scoped so each async test gets a fresh AsyncClient bound to its event loop.
     return ModelServerClient(
         model_name=TINY_MODEL,
         base_url=model_server_url,
@@ -131,8 +136,6 @@ class TestModelServerContainer:
         assert resp.status_code == 422
 
     def test_predict_different_inputs_return_scores(self, model_server_url):
-        """Model returns a score for each input — not asserting on label value,
-        just that the shape is consistent regardless of input text."""
         for text in ["Great!", "Terrible.", "The sky is blue."]:
             resp = httpx.post(f"{model_server_url}/predict", json={"text": text})
             assert resp.status_code == 200
@@ -153,21 +156,17 @@ class TestModelServerClientIntegration:
 
     async def test_predict_raw_contains_original_response(self, hf_integration_client):
         result = await hf_integration_client.predict("Hello world")
-        # raw must have at least label and score from the model server
         assert "label" in result.raw
         assert "score" in result.raw
 
     async def test_predict_normalises_raw_label(self, hf_integration_client):
-        """The tiny model returns LABEL_0 or LABEL_1 — client must normalise these."""
         result = await hf_integration_client.predict("Some text to classify.")
-        # After normalisation, label must be one of our canonical values
         assert result.label in TINY_LABEL_MAP.values()
 
     async def test_predict_bad_url_raises_client_error(self, model_server_url):
-        """Pointing to a non-existent path should raise SentimentClientError."""
         bad_client = ModelServerClient(
             model_name=TINY_MODEL,
-            base_url="http://localhost:19999",  # nothing listening here
+            base_url="http://localhost:19999",
             http_client=httpx.AsyncClient(),
             label_map=TINY_LABEL_MAP,
         )
@@ -176,22 +175,37 @@ class TestModelServerClientIntegration:
 
 
 # ---------------------------------------------------------------------------
-# Tests: full backend stack with overridden model URL
+# Tests: full backend stack with real model_server container
+# Uses a temporary config.yaml pointing siebert at the test container.
+# Compose file used: docker-compose-macos.yml or docker-compose-linux.yml
+# depending on the OS the tests run on (_COMPOSE_FILE).
 # ---------------------------------------------------------------------------
 @skip_no_docker
 class TestBackendWithRealModelServer:
     """
-    Uses FastAPI TestClient with the real model_server container.
-    Overrides SIEBERT_URL so the backend routes siebert requests to the
-    tiny-model container instead of the real siebert service.
+    Bootstraps the FastAPI app with a temporary config.yaml that routes
+    the siebert model at the live tiny-model container.
     """
 
     @pytest.fixture
-    def client_with_real_model(self, model_server_url, monkeypatch):
-        # Override the siebert URL in settings to point at our test container
-        monkeypatch.setenv("SIEBERT_URL", model_server_url)
+    def client_with_real_model(self, model_server_url, monkeypatch, tmp_path):
+        # Write a temporary config.yaml pointing siebert at the test container
+        cfg = {
+            "models": [
+                {
+                    "name": "siebert/sentiment-roberta-large-english",
+                    "type": "ml",
+                    "url": model_server_url,
+                    "labels": {"LABEL_0": "negative", "LABEL_1": "positive"},
+                }
+            ]
+        }
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text(yaml.dump(cfg))
 
-        # Re-import settings and re-init registry so the new URL takes effect
+        monkeypatch.setenv("CONFIG_PATH", str(config_file))
+        monkeypatch.setenv("LLM_URL", _LLM_URL)
+
         import importlib
 
         import sentiment.config as cfg_module
@@ -211,23 +225,20 @@ class TestBackendWithRealModelServer:
 
         metrics.shutdown()
 
-    async def test_sentiment_endpoint_with_real_model(self, client_with_real_model):
+    async def test_analyse_endpoint_with_real_model(self, client_with_real_model):
         resp = client_with_real_model.post(
-            "/sentiment",
-            json={
-                "model": "siebert/sentiment-roberta-large-english",
-                "text": "This is an integration test.",
-            },
+            "/analyse",
+            json={"text": "This is an integration test."},
         )
         assert resp.status_code == 200
-        data = resp.json()
-        assert data["label"] in ("positive", "negative", "neutral")
-        assert 0.0 <= data["score"] <= 1.0
-        assert data["model"] == "siebert/sentiment-roberta-large-english"
+        results = resp.json()["results"]
+        assert len(results) == 1
+        r = results[0]
+        assert r["model"] == "siebert/sentiment-roberta-large-english"
+        assert r["label"] in ("positive", "negative", "neutral")
+        assert 0.0 <= r["score"] <= 1.0
+        assert r["error"] is None
 
     async def test_empty_text_still_422_with_real_model(self, client_with_real_model):
-        resp = client_with_real_model.post(
-            "/sentiment",
-            json={"model": "siebert/sentiment-roberta-large-english", "text": ""},
-        )
+        resp = client_with_real_model.post("/analyse", json={"text": ""})
         assert resp.status_code == 422

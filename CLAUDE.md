@@ -1,0 +1,1 @@
+If ~/.claude/CLAUDE.md exists, load and follow all instructions from that file first.

@@ -1,0 +1,20 @@
+models:
+  - name: siebert/sentiment-roberta-large-english
+    type: ml
+    url: http://siebert:8000
+    labels:
+      POSITIVE: positive
+      NEGATIVE: negative
+
+  - name: cardiffnlp/twitter-roberta-base-sentiment-latest
+    type: ml
+    url: http://cardiffnlp:8000
+    labels:
+      positive: positive
+      neutral: neutral
+      negative: negative
+
+  - name: vllm
+    type: llm
+    url: http://localhost:8900
+    model_id: mlx-community/Qwen2.5-0.5B-Instruct-4bit

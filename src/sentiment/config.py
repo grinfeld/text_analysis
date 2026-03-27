@@ -1,17 +1,18 @@
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+import os
+import re
+
+import yaml
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # Model server URLs (internal Docker hostnames)
-    siebert_url: str = "http://siebert:8000"
-    cardiffnlp_url: str = "http://cardiffnlp:8000"
-    distilbert_url: str = "http://distilbert:8000"
-
-    # vLLM service
-    vllm_url: str = "http://vllm:8900"
-    vllm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
+    config_path: str = "config.yaml"
 
     # Logging
     log_level: str = "INFO"
@@ -19,3 +20,41 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+
+@dataclass(frozen=True)
+class ModelConfig:
+    name: str
+    type: str          # "ml" | "llm"
+    url: str
+    model_id: str | None = None
+    labels: dict[str, str] | None = None
+
+
+_ENV_VAR_RE = re.compile(r"\$\{(\w+)(?::-(.*?))?\}")
+
+
+def _expand_env(value: Any) -> Any:
+    """Expand ${VAR:-default} placeholders in string values."""
+    if not isinstance(value, str):
+        return value
+    return _ENV_VAR_RE.sub(
+        lambda m: os.environ.get(m.group(1), m.group(2) or ""), value
+    )
+
+
+def load_model_configs(path: str | None = None) -> list[ModelConfig]:
+    config_file = Path(path or settings.config_path)
+    with config_file.open() as f:
+        data: dict[str, Any] = yaml.safe_load(f)
+
+    configs = []
+    for entry in data["models"]:
+        configs.append(ModelConfig(
+            name=entry["name"],
+            type=entry["type"],
+            url=_expand_env(entry["url"]),
+            model_id=_expand_env(entry.get("model_id")),
+            labels=entry.get("labels"),
+        ))
+    return configs

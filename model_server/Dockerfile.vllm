@@ -1,0 +1,6 @@
+FROM vllm/vllm-openai:v0.17.0
+
+EXPOSE 8900
+
+ENTRYPOINT ["python3", "-m", "vllm.entrypoints.openai.api_server"]
+CMD ["--port", "8900"]

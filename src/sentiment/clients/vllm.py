@@ -28,14 +28,14 @@ VALID_LABELS = {"positive", "neutral", "negative"}
 class VllmClient(SentimentClient):
     """Client for a vLLM server using the OpenAI-compatible chat completions API."""
 
-    model_name = "vllm"
-
     def __init__(
         self,
+        model_name: str,
         base_url: str,
         model_id: str,
         http_client: httpx.AsyncClient,
     ) -> None:
+        self.model_name = model_name
         self._base_url = base_url.rstrip("/")
         self._model_id = model_id
         self._http = http_client

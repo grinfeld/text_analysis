@@ -1,17 +1,18 @@
+import time
+
 import structlog
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
 from pydantic import BaseModel, field_validator
 
 from sentiment.clients.base import SentimentClientError
-from sentiment.registry import get_client
+from sentiment.registry import get_all_clients
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
 
 
-class SentimentRequest(BaseModel):
-    model: str
+class AnalyseRequest(BaseModel):
     text: str
 
     @field_validator("text")
@@ -22,29 +23,39 @@ class SentimentRequest(BaseModel):
         return v
 
 
-class SentimentResponse(BaseModel):
+class ModelResult(BaseModel):
     model: str
-    label: str
-    score: float
-    raw: dict
+    label: str | None = None
+    score: float | None = None
+    latency_s: float
+    error: str | None = None
 
 
-@router.post("/sentiment", response_model=SentimentResponse)
-async def classify_sentiment(req: SentimentRequest) -> SentimentResponse:
-    try:
-        client = get_client(req.model)
-    except SentimentClientError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+class AnalyseResponse(BaseModel):
+    results: list[ModelResult]
 
-    try:
-        result = await client.predict(req.text)
-    except SentimentClientError as exc:
-        logger.error("prediction_failed", model=req.model, error=str(exc))
-        raise HTTPException(status_code=502, detail=str(exc))
 
-    return SentimentResponse(
-        model=req.model,
-        label=result.label,
-        score=result.score,
-        raw=result.raw,
-    )
+@router.post("/analyse", response_model=AnalyseResponse)
+async def analyse(req: AnalyseRequest) -> AnalyseResponse:
+    results = []
+    for client in get_all_clients():
+        start = time.perf_counter()
+        try:
+            result = await client.predict(req.text)
+            latency_s = time.perf_counter() - start
+            results.append(ModelResult(
+                model=client.model_name,
+                label=result.label,
+                score=result.score,
+                latency_s=round(latency_s, 4),
+            ))
+        except SentimentClientError as exc:
+            latency_s = time.perf_counter() - start
+            logger.error("model_failed", model=client.model_name, error=str(exc))
+            results.append(ModelResult(
+                model=client.model_name,
+                latency_s=round(latency_s, 4),
+                error=str(exc),
+            ))
+
+    return AnalyseResponse(results=results)

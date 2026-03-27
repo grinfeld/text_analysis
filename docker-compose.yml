@@ -5,7 +5,6 @@ services:
   siebert:
     build:
       context: ./model_server
-    image: sentiment-model-server
     environment:
       MODEL_NAME: siebert/sentiment-roberta-large-english
       HF_HOME: /hf_cache
@@ -16,12 +15,11 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
-      start_period: 120s   # model download + load time
+      start_period: 120s
 
   cardiffnlp:
     build:
       context: ./model_server
-    image: sentiment-model-server
     environment:
       MODEL_NAME: cardiffnlp/twitter-roberta-base-sentiment-latest
       HF_HOME: /hf_cache
@@ -37,7 +35,6 @@ services:
   distilbert:
     build:
       context: ./model_server
-    image: sentiment-model-server
     environment:
       MODEL_NAME: lxyuan/distilbert-base-multilingual-cased-sentiments-student
       HF_HOME: /hf_cache
@@ -50,14 +47,16 @@ services:
       retries: 10
       start_period: 120s
 
-  # ── vLLM ─────────────────────────────────────────────────────────────────
+  # ── vLLM (linux profile only) ─────────────────────────────────────────────
 
   vllm:
+    profiles: [linux]
     build:
-      context: .
+      context: ./model_server
       dockerfile: Dockerfile.vllm
     environment:
       HF_HOME: /hf_cache
+      VLLM_LOGGING_LEVEL: DEBUG
     volumes:
       - hf_cache:/hf_cache
     ports:
@@ -74,11 +73,11 @@ services:
       - "--device"
       - "cpu"
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8900/health')"]
       interval: 20s
       timeout: 15s
       retries: 15
-      start_period: 300s   # model download + CPU engine init
+      start_period: 300s
 
   # ── FastAPI backend ───────────────────────────────────────────────────────
 
@@ -89,21 +88,17 @@ services:
     ports:
       - "8000:8000"
     environment:
-      SIEBERT_URL: http://siebert:8000
-      CARDIFFNLP_URL: http://cardiffnlp:8000
-      DISTILBERT_URL: http://distilbert:8000
-      VLLM_URL: http://vllm:8900
-      VLLM_MODEL: Qwen/Qwen2.5-0.5B-Instruct
       LOG_LEVEL: INFO
       LOG_FORMAT: json
+      VLLM_URL: ${LLM_URL:-http://vllm:8900}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
     depends_on:
       siebert:
         condition: service_healthy
       cardiffnlp:
         condition: service_healthy
       distilbert:
-        condition: service_healthy
-      vllm:
         condition: service_healthy
 
   # ── Frontend (nginx) ──────────────────────────────────────────────────────

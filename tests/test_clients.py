@@ -32,8 +32,9 @@ def vllm_http():
 @pytest.fixture
 def vllm_client(vllm_http):
     return VllmClient(
-        base_url="http://vllm:8900",
-        model_id="Qwen/Qwen2.5-0.5B-Instruct",
+        model_name="vllm",
+        base_url="http://localhost:8900",
+        model_id="mlx-community/Qwen2.5-0.5B-Instruct-4bit",
         http_client=vllm_http,
     )
 
@@ -97,7 +98,7 @@ class TestVllmClient:
 
     @respx.mock
     async def test_predict_positive(self, vllm_client):
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=self._make_vllm_response("positive", 0.9)
         )
         result = await vllm_client.predict("Great product!")
@@ -106,7 +107,7 @@ class TestVllmClient:
 
     @respx.mock
     async def test_predict_neutral(self, vllm_client):
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=self._make_vllm_response("neutral", 0.7)
         )
         result = await vllm_client.predict("The sky is blue.")
@@ -114,7 +115,7 @@ class TestVllmClient:
 
     @respx.mock
     async def test_unknown_label_falls_back_to_neutral(self, vllm_client):
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=self._make_vllm_response("mixed", 0.5)
         )
         result = await vllm_client.predict("It's complicated.")
@@ -123,7 +124,7 @@ class TestVllmClient:
     @respx.mock
     async def test_bad_json_raises_client_error(self, vllm_client):
         body = {"choices": [{"message": {"content": "not json at all"}}]}
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=httpx.Response(200, json=body)
         )
         with pytest.raises(SentimentClientError):
@@ -131,7 +132,7 @@ class TestVllmClient:
 
     @respx.mock
     async def test_http_error_raises_client_error(self, vllm_client):
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=httpx.Response(500, text="internal error")
         )
         with pytest.raises(SentimentClientError):
@@ -139,7 +140,7 @@ class TestVllmClient:
 
     @respx.mock
     async def test_score_clamped_to_unit_interval(self, vllm_client):
-        respx.post("http://vllm:8900/v1/chat/completions").mock(
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=self._make_vllm_response("positive", 1.5)
         )
         result = await vllm_client.predict("amazing!")
