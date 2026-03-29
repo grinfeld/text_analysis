@@ -153,7 +153,7 @@ class TestAnalyseTopicEndpoint:
         assert len(results) == 11
         models = [r["model"] for r in results]
         assert "MoritzLaurer/deberta-v3-base-zeroshot-v1" in models
-        assert "MoritzLaurer/deberta-v3-large-zeroshot-v2" in models
+        assert "MoritzLaurer/deberta-v3-large-zeroshot-v1" in models
         assert "cross-encoder/nli-deberta-v3-large" in models
         assert "facebook/bart-large-mnli" in models
         assert "BAAI/bge-small-en-v1.5" in models
@@ -189,7 +189,7 @@ class TestAnalyseTopicEndpoint:
         models = [r["model"] for r in resp.json()["results"]]
         assert models == [
             "MoritzLaurer/deberta-v3-base-zeroshot-v1",
-            "MoritzLaurer/deberta-v3-large-zeroshot-v2",
+            "MoritzLaurer/deberta-v3-large-zeroshot-v1",
             "cross-encoder/nli-deberta-v3-large",
             "facebook/bart-large-mnli",
             "BAAI/bge-small-en-v1.5",

@@ -73,7 +73,7 @@ models:
     type: ml
     url: http://deberta:8000
 
-  - name: MoritzLaurer/deberta-v3-large-zeroshot-v2
+  - name: MoritzLaurer/deberta-v3-large-zeroshot-v1
     for: topic
     type: ml
     url: http://deberta_large:8000

@@ -174,7 +174,7 @@ Classify directly against taxonomy slugs as candidate labels:
 | Name | Container | Notes |
 |------|-----------|-------|
 | `MoritzLaurer/deberta-v3-base-zeroshot-v1` | `deberta` | DeBERTa, 86M, recommended small zero-shot |
-| `MoritzLaurer/deberta-v3-large-zeroshot-v2` | `deberta-large` | DeBERTa, 400M, higher accuracy |
+| `MoritzLaurer/deberta-v3-large-zeroshot-v1` | `deberta_large` | DeBERTa, 400M, higher accuracy |
 | `cross-encoder/nli-deberta-v3-large` | `nli-deberta` | NLI cross-encoder, 400M |
 | `facebook/bart-large-mnli` | `bart` | BART, 400M, widely-used zero-shot baseline |
 

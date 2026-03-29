@@ -122,7 +122,7 @@ services:
     <<: *model-zeroshot
     profiles: [topic]
     environment:
-      MODEL_NAME: MoritzLaurer/deberta-v3-large-zeroshot-v2
+      MODEL_NAME: MoritzLaurer/deberta-v3-large-zeroshot-v1
       TASK: zero-shot-classification
       CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
       HF_HOME: /hf_cache
