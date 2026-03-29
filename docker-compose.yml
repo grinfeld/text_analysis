@@ -269,22 +269,6 @@ services:
       VLLM_URL: ${LLM_URL:-http://vllm:8900}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
-    depends_on:
-      siebert:
-        condition: service_healthy
-      cardiffnlp:
-        condition: service_healthy
-      distilbert:
-        condition: service_healthy
-      nrc:
-        condition: service_healthy
-      vader:
-        condition: service_healthy
-      finbert:
-        condition: service_healthy
-      nlptown:
-        condition: service_healthy
-
   # ── Frontend (nginx) ──────────────────────────────────────────────────────
 
   frontend:
