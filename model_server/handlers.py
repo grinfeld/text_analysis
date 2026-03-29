@@ -5,11 +5,6 @@ from abc import ABC, abstractmethod
 logger = logging.getLogger(__name__)
 
 MODEL_NAME = os.environ.get("MODEL_NAME", os.environ.get("TASK", ""))
-_CANDIDATE_LABELS: list[str] = [
-    l.strip()
-    for l in os.environ.get("CANDIDATE_LABELS", "").replace(",", "\n").split("\n")
-    if l.strip()
-]
 
 
 class TaskHandler(ABC):
@@ -17,7 +12,7 @@ class TaskHandler(ABC):
     def warmup(self) -> None: ...
 
     @abstractmethod
-    def predict(self, text: str) -> list[tuple[str, float]]: ...
+    def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]: ...
 
 
 class TextClassificationHandler(TaskHandler):
@@ -32,7 +27,7 @@ class TextClassificationHandler(TaskHandler):
     def warmup(self) -> None:
         self._pipeline("warmup")
 
-    def predict(self, text: str) -> list[tuple[str, float]]:
+    def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]:
         results = self._pipeline(text)
         top = results[0][0] if isinstance(results[0], list) else results[0]
         return [(top["label"], top["score"])]
@@ -42,18 +37,18 @@ class ZeroShotClassificationHandler(TaskHandler):
     def __init__(self) -> None:
         if not MODEL_NAME:
             raise RuntimeError("MODEL_NAME is required for zero-shot-classification")
-        if not _CANDIDATE_LABELS:
-            raise RuntimeError("CANDIDATE_LABELS is required for zero-shot-classification")
         from transformers import pipeline
         logger.info("Loading model: %s", MODEL_NAME)
         self._pipeline = pipeline("zero-shot-classification", model=MODEL_NAME)
         logger.info("Model loaded: %s", MODEL_NAME)
 
     def warmup(self) -> None:
-        self._pipeline("warmup text", candidate_labels=_CANDIDATE_LABELS)
+        self._pipeline("warmup text", candidate_labels=["warmup"])
 
-    def predict(self, text: str) -> list[tuple[str, float]]:
-        result = self._pipeline(text, candidate_labels=_CANDIDATE_LABELS)
+    def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]:
+        if not candidate_labels:
+            raise ValueError("candidate_labels is required for zero-shot-classification")
+        result = self._pipeline(text, candidate_labels=candidate_labels)
         return list(zip(result["labels"][:3], result["scores"][:3]))
 
 
@@ -61,27 +56,32 @@ class EmbeddingHandler(TaskHandler):
     def __init__(self) -> None:
         if not MODEL_NAME:
             raise RuntimeError("MODEL_NAME is required for embedding")
-        if not _CANDIDATE_LABELS:
-            raise RuntimeError("CANDIDATE_LABELS is required for embedding")
         import numpy as np
         from sentence_transformers import SentenceTransformer
         logger.info("Loading model: %s", MODEL_NAME)
         self._model = SentenceTransformer(MODEL_NAME)
-        logger.info("Encoding %d candidate labels", len(_CANDIDATE_LABELS))
-        self._label_embeddings: np.ndarray = self._model.encode(
-            _CANDIDATE_LABELS, normalize_embeddings=True
-        )
+        self._np = np
+        self._cache: dict[tuple[str, ...], np.ndarray] = {}
         logger.info("Model loaded: %s", MODEL_NAME)
+
+    def _label_embeddings(self, candidate_labels: list[str]):
+        key = tuple(candidate_labels)
+        if key not in self._cache:
+            logger.info("Encoding %d candidate labels", len(candidate_labels))
+            self._cache[key] = self._model.encode(candidate_labels, normalize_embeddings=True)
+        return self._cache[key]
 
     def warmup(self) -> None:
         self._model.encode(["warmup"], normalize_embeddings=True)
 
-    def predict(self, text: str) -> list[tuple[str, float]]:
-        import numpy as np
+    def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]:
+        if not candidate_labels:
+            raise ValueError("candidate_labels is required for embedding")
+        np = self._np
         text_emb = self._model.encode([text], normalize_embeddings=True)[0]
-        sims = self._label_embeddings @ text_emb
+        sims = self._label_embeddings(candidate_labels) @ text_emb
         top3_idx = np.argsort(sims)[::-1][:3]
-        return [(_CANDIDATE_LABELS[i], round(float(sims[i]), 4)) for i in top3_idx]
+        return [(candidate_labels[i], round(float(sims[i]), 4)) for i in top3_idx]
 
 
 class VaderHandler(TaskHandler):
@@ -96,7 +96,7 @@ class VaderHandler(TaskHandler):
     def warmup(self) -> None:
         self._analyzer.polarity_scores("warmup")
 
-    def predict(self, text: str) -> list[tuple[str, float]]:
+    def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]:
         compound = self._analyzer.polarity_scores(text)["compound"]
         if compound >= 0.05:
             label = "positive"
@@ -117,9 +117,9 @@ class NrcHandler(TaskHandler):
         logger.info("NRC ready")
 
     def warmup(self) -> None:
-        self.predict("warmup")
+        self.predict("warmup", [])
 
-    def predict(self, text: str) -> list[tuple[str, float]]:
+    def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]:
         scores = self._NRCLex(text).raw_emotion_scores
         pos = sum(scores.get(e, 0) for e in self._POSITIVE)
         neg = sum(scores.get(e, 0) for e in self._NEGATIVE)

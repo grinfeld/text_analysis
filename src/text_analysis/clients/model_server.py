@@ -15,12 +15,14 @@ class ModelServerClient(ModelClient):
         http_client: httpx.AsyncClient,
         label_map: dict[str, str],
         task: str = "sentiment",
+        candidate_labels: list[str] | None = None,
     ) -> None:
         self.model_name = model_name
         self.task = task
         self._base_url = base_url.rstrip("/")
         self._http = http_client
         self._label_map = label_map
+        self._candidate_labels = candidate_labels or []
 
     def _normalise_label(self, raw_label: str) -> str:
         if not self._label_map:
@@ -33,8 +35,11 @@ class ModelServerClient(ModelClient):
 
     async def _predict(self, text: str) -> PredictionResult:
         url = f"{self._base_url}/predict"
+        payload: dict = {"text": text}
+        if self._candidate_labels:
+            payload["candidate_labels"] = self._candidate_labels
         try:
-            response = await self._http.post(url, json={"text": text}, timeout=30.0)
+            response = await self._http.post(url, json=payload, timeout=30.0)
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise ModelClientError(f"Timeout calling {url}") from exc

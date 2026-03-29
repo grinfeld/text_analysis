@@ -43,6 +43,7 @@ def init() -> None:
                 http_client=http,
                 label_map=model_cfg.labels or {},
                 task=task,
+                candidate_labels=model_cfg.candidate_labels,
             ))
         elif model_cfg.type == "llm":
             # for: llm means the same server is used for both sentiment and topic.

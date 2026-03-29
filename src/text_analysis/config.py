@@ -33,6 +33,7 @@ class ModelConfig:
     for_: str | None = None
     model_id: str | None = None
     labels: dict[str, str] | None = None
+    candidate_labels: list[str] | None = None
 
 
 _ENV_VAR_RE = re.compile(r"\$\{(\w+)(?::-(.*?))?\}")
@@ -61,5 +62,6 @@ def load_model_configs(path: str | None = None) -> list[ModelConfig]:
             for_=entry.get("for"),
             model_id=_expand_env(entry.get("model_id")),
             labels=entry.get("labels"),
+            candidate_labels=entry.get("candidate_labels"),
         ))
     return configs

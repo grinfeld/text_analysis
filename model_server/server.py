@@ -36,6 +36,7 @@ app = FastAPI(title=f"Model Server — {MODEL_NAME}", lifespan=lifespan)
 
 class PredictRequest(BaseModel):
     text: str
+    candidate_labels: list[str] = []
 
 
 class LabelScore(BaseModel):
@@ -51,7 +52,7 @@ class PredictResponse(BaseModel):
 def predict(req: PredictRequest) -> PredictResponse:
     if not req.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
-    results = _handler.predict(req.text)
+    results = _handler.predict(req.text, req.candidate_labels)
     return PredictResponse(labels=[LabelScore(label=l, score=s) for l, s in results])
 
 
