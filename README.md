@@ -1,6 +1,6 @@
 # Text Analysis — Learning Project
 
-A full-stack text analysis playground. Enter text, choose a task (Sentiment or Topic), and all configured models run against it simultaneously — results are returned side-by-side with model name, label, confidence score, and inference latency.
+A full-stack text analysis playground. Enter text, choose a task (Sentiment or Topic), and all configured models run simultaneously — results are returned side-by-side with model name, label, confidence score, and inference latency.
 
 Stack: FastAPI · HuggingFace Transformers · sentence-transformers · NLTK VADER · NRC Emotion Lexicon · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
 
@@ -8,9 +8,15 @@ Stack: FastAPI · HuggingFace Transformers · sentence-transformers · NLTK VADE
 
 ## Quick Start
 
-Sentiment model containers are grouped under the `sentiment` profile; topic model containers under the `topic` profile. Backend, frontend, Prometheus, and Grafana start regardless of profile.
+Three Docker Compose profiles control which model containers start:
 
-A single Docker image (`sentiment/model-server:latest`) is built once and reused by all model containers.
+| Profile | What starts |
+|---------|-------------|
+| `sentiment` | All sentiment model containers |
+| `topic` | All topic model containers |
+| `linux` | vLLM container (Linux/CPU only) |
+
+Backend, frontend, Prometheus, and Grafana always start regardless of profile.
 
 ### macOS / Apple Silicon
 
@@ -52,9 +58,7 @@ docker compose --profile sentiment --profile topic --profile linux up --build
 
 ---
 
-First run downloads model weights — this can take several minutes. The backend waits for all sentiment model containers to pass their healthchecks before starting. VADER and NRC start in seconds; neural models take longer.
-
-All model containers run a warmup inference at startup, so the first user request is not cold.
+First run downloads model weights — this can take several minutes. VADER and NRC start in seconds; neural models take longer. All model containers run a warmup inference at startup, so the first user request is not cold.
 
 ---
 
@@ -67,66 +71,6 @@ All model containers run a warmup inference at startup, so the first user reques
 | Prometheus | http://localhost:9090 | Metrics scraper |
 | Grafana | http://localhost:3000 | Dashboard (admin / admin) |
 | mlx-lm / vLLM | http://localhost:8900 | OpenAI-compatible LLM API |
-
----
-
-## Models
-
-Defined in `config.yaml`, loaded at backend startup. Each model has a `for` field that determines which task it serves.
-
-| Type | Implementation | Notes |
-|------|---------------|-------|
-| `ml` | `ModelServerClient` | Posts to a `/predict` HTTP endpoint |
-| `llm` | `VllmClient` | Posts to an OpenAI-compatible `/v1/chat/completions` endpoint |
-
-### Sentiment models (`for: sentiment`, profile: `sentiment`)
-
-| Name | Container | Notes |
-|------|-----------|-------|
-| `siebert/sentiment-roberta-large-english` | `siebert` | RoBERTa, 2-class, formal English |
-| `cardiffnlp/twitter-roberta-base-sentiment-latest` | `cardiffnlp` | RoBERTa, 3-class, Twitter-trained |
-| `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | `distilbert` | DistilBERT, 3-class, multilingual |
-| `nrc` | `nrc` | NRC Emotion Lexicon — positive/negative emotion aggregation |
-| `vader` | `vader` | VADER — rule-based lexicon, compound score → 3-class |
-| `ProsusAI/finbert` | `finbert` | BERT, 3-class, finance domain |
-| `nlptown/bert-base-multilingual-uncased-sentiment` | `nlptown` | BERT, 5-star → 3-class, multilingual |
-
-### Topic models (`for: topic`, profile: `topic`)
-
-Zero-shot NLI classifiers — classify directly against taxonomy slugs as candidate labels:
-
-| Name | Container | Notes |
-|------|-----------|-------|
-| `MoritzLaurer/deberta-v3-base-zeroshot-v1` | `deberta` | DeBERTa, 86M, recommended small zero-shot |
-| `MoritzLaurer/deberta-v3-large-zeroshot-v2` | `deberta-large` | DeBERTa, 400M, higher accuracy |
-| `cross-encoder/nli-deberta-v3-large` | `nli-deberta` | NLI cross-encoder, 400M |
-| `facebook/bart-large-mnli` | `bart` | BART, 400M, widely-used zero-shot baseline |
-
-Embedding similarity — embed text and find nearest topic slug by cosine similarity:
-
-| Name | Container | Notes |
-|------|-----------|-------|
-| `BAAI/bge-small-en-v1.5` | `bge-small` | 33M, recommended default embedder |
-| `BAAI/bge-large-en-v1.5` | `bge-large` | 335M, higher accuracy |
-| `sentence-transformers/all-MiniLM-L6-v2` | `minilm` | 22M, fastest |
-| `sentence-transformers/all-mpnet-base-v2` | `mpnet` | 110M, good mid-tier |
-| `intfloat/e5-small-v2` | `e5-small` | 33M, retrieval-focused |
-| `intfloat/e5-large-v2` | `e5-large` | 335M, best E5 variant |
-
-### LLM (`for: llm`, shared for both tasks)
-
-| Name | Container | Notes |
-|------|-----------|-------|
-| `vllm` | host / `vllm` | Qwen2.5-7B-Instruct via mlx-lm (macOS) or vLLM container (Linux) |
-
-The LLM uses task-specific prompts — sentiment prompt for the sentiment task, topic prompt for the topic task.
-
-### Topic taxonomy
-
-Topic slugs used as candidate labels:
-`arms_trafficking`, `financial_crime`, `surveillance_operation`, `human_intelligence`, `signals_intelligence`, `covert_operation`, `money_laundering`, `sanctions_evasion`, `recruitment`, `daily_reporting`, `network_configuration`, `routing`, `administrative`, `organizational_structure`, `spatial_context`, `temporal_reference`
-
-The LLM may also propose novel slugs not in this list.
 
 ---
 
@@ -147,7 +91,7 @@ Response:
 {
   "results": [
     { "model": "siebert/sentiment-roberta-large-english", "label": "positive", "score": 0.9987, "latency_s": 0.31, "error": null },
-    { "model": "vllm",                                   "label": "positive", "score": 0.85,   "latency_s": 2.1,  "error": null }
+    { "model": "vllm",                                    "label": "positive", "score": 0.85,   "latency_s": 2.1,  "error": null }
   ]
 }
 ```
@@ -171,25 +115,87 @@ models:
       NEGATIVE: negative
 
   - name: my-llm
-    for: llm
+    for: llm              # registers one client for sentiment AND one for topic
     type: llm
     url: http://host:port
     model_id: org/model-name-on-hub
 ```
 
+`for: llm` is special — a single config entry registers two clients automatically (one for sentiment, one for topic) using different prompts.
+
+---
+
+## Models
+
+### Sentiment (`for: sentiment`, profile: `sentiment`)
+
+| Name | Container | Notes |
+|------|-----------|-------|
+| `siebert/sentiment-roberta-large-english` | `siebert` | RoBERTa, 2-class, formal English |
+| `cardiffnlp/twitter-roberta-base-sentiment-latest` | `cardiffnlp` | RoBERTa, 3-class, Twitter-trained |
+| `lxyuan/distilbert-base-multilingual-cased-sentiments-student` | `distilbert` | DistilBERT, 3-class, multilingual |
+| `ProsusAI/finbert` | `finbert` | BERT, 3-class, finance domain |
+| `nlptown/bert-base-multilingual-uncased-sentiment` | `nlptown` | BERT, 5-star → 3-class, multilingual |
+| `nrc` | `nrc` | NRC Emotion Lexicon — positive/negative emotion aggregation |
+| `vader` | `vader` | VADER — rule-based lexicon, compound score → 3-class |
+
+### Topic — zero-shot NLI (`for: topic`, profile: `topic`)
+
+Classify directly against taxonomy slugs as candidate labels:
+
+| Name | Container | Notes |
+|------|-----------|-------|
+| `MoritzLaurer/deberta-v3-base-zeroshot-v1` | `deberta` | DeBERTa, 86M, recommended small zero-shot |
+| `MoritzLaurer/deberta-v3-large-zeroshot-v2` | `deberta-large` | DeBERTa, 400M, higher accuracy |
+| `cross-encoder/nli-deberta-v3-large` | `nli-deberta` | NLI cross-encoder, 400M |
+| `facebook/bart-large-mnli` | `bart` | BART, 400M, widely-used zero-shot baseline |
+
+### Topic — embedding similarity (`for: topic`, profile: `topic`)
+
+Embed text and find nearest topic slug by cosine similarity:
+
+| Name | Container | Notes |
+|------|-----------|-------|
+| `BAAI/bge-small-en-v1.5` | `bge-small` | 33M, recommended default embedder |
+| `BAAI/bge-large-en-v1.5` | `bge-large` | 335M, higher accuracy |
+| `sentence-transformers/all-MiniLM-L6-v2` | `minilm` | 22M, fastest |
+| `sentence-transformers/all-mpnet-base-v2` | `mpnet` | 110M, good mid-tier |
+| `intfloat/e5-small-v2` | `e5-small` | 33M, retrieval-focused |
+| `intfloat/e5-large-v2` | `e5-large` | 335M, best E5 variant |
+
+### LLM (`for: llm`, shared for both tasks)
+
+| Name | Container | Notes |
+|------|-----------|-------|
+| `vllm` | host / `vllm` | Qwen2.5-7B-Instruct via mlx-lm (macOS) or vLLM container (Linux) |
+
+A single config entry registers two clients — one uses the sentiment prompt (closed labels: positive / neutral / negative), the other uses the topic prompt (open-ended: example slugs provided, model may propose novel ones).
+
+### Topic taxonomy
+
+Candidate slugs used by zero-shot and embedding models, and as examples for the LLM:
+
+`arms_trafficking`, `financial_crime`, `surveillance_operation`, `human_intelligence`, `signals_intelligence`, `covert_operation`, `money_laundering`, `sanctions_evasion`, `recruitment`, `daily_reporting`, `network_configuration`, `routing`, `administrative`, `organizational_structure`, `spatial_context`, `temporal_reference`
+
 ---
 
 ## Model Server
 
-All model containers use a single Docker image (`sentiment/model-server:latest`) built from `model_server/`. The `TASK` environment variable selects the inference path:
+All model containers use a single Docker image (`sentiment/model-server:latest`) built from `model_server/`. The `TASK` environment variable selects the inference path; `MODEL_NAME` sets the HuggingFace model to load.
 
-| `TASK` | Description |
-|--------|-------------|
-| `text-classification` | HuggingFace pipeline, default |
-| `zero-shot-classification` | HuggingFace zero-shot NLI; requires `CANDIDATE_LABELS` |
-| `embedding` | sentence-transformers cosine similarity; requires `CANDIDATE_LABELS` |
-| `vader` | NLTK VADER lexicon, no `MODEL_NAME` needed |
-| `nrc` | NRC Emotion Lexicon, no `MODEL_NAME` needed |
+Handler classes are defined in `model_server/handlers.py`; `model_server/server.py` owns only the FastAPI app and routes.
+
+| `TASK` | Handler | Required env vars |
+|--------|---------|-------------------|
+| `text-classification` | `TextClassificationHandler` | `MODEL_NAME` |
+| `zero-shot-classification` | `ZeroShotClassificationHandler` | `MODEL_NAME`, `CANDIDATE_LABELS` |
+| `embedding` | `EmbeddingHandler` | `MODEL_NAME`, `CANDIDATE_LABELS` |
+| `vader` | `VaderHandler` | — |
+| `nrc` | `NrcHandler` | — |
+
+`CANDIDATE_LABELS` is a comma-separated string of classification targets.
+
+The Docker image is built once (on the first service that declares `build:` for each profile) and reused by all other model containers via `image: sentiment/model-server:latest`.
 
 ---
 
@@ -197,7 +203,7 @@ All model containers use a single Docker image (`sentiment/model-server:latest`)
 
 | Variable | Where set | Description |
 |----------|-----------|-------------|
-| `LLM_URL` | shell / export | URL of the LLM server, passed to the backend as `VLLM_URL` by Compose. Defaults to `http://vllm:8900`. Set to `http://host.docker.internal:8900` on macOS. |
+| `LLM_URL` | shell / export | URL of the LLM server. Passed to the backend as `VLLM_URL`. Defaults to `http://vllm:8900`. Set to `http://host.docker.internal:8900` on macOS. |
 | `CONFIG_PATH` | shell / env | Path to `config.yaml`. Defaults to `config.yaml`. Useful in tests. |
 | `LOG_LEVEL` | `docker-compose.yml` | Python log level. Default: `INFO`. |
 | `LOG_FORMAT` | `docker-compose.yml` | `json` or `console`. Default: `json`. |
@@ -226,11 +232,14 @@ config.yaml                   Model definitions (edit to add/remove models)
 
 Dockerfile                    Backend image (FastAPI, uv)
 docker-compose.yml            All services; sentiment/topic/linux profiles
+                              YAML anchors (x-model-hf, x-model-zeroshot,
+                              x-model-embedding, x-model-lexicon) eliminate
+                              repetition across model service definitions
 
 model_server/
-  server.py                   Unified model server — behaviour selected by TASK env var
-                              Supports: text-classification, zero-shot-classification,
-                              embedding, vader, nrc
+  server.py                   FastAPI app + /predict and /health routes
+  handlers.py                 TaskHandler ABC + concrete implementations
+                              (TextClassification, ZeroShot, Embedding, Vader, Nrc)
   requirements.txt            All deps: transformers, sentence-transformers, nltk, nrclex
   Dockerfile                  Single image for all model containers
   Dockerfile.vllm             vllm/vllm-openai image (Linux only)
@@ -241,7 +250,7 @@ src/sentiment/
   registry.py                 Builds clients from config.yaml at startup
   api/routes.py               POST /analyse — accepts "for": "sentiment"|"topic"
   clients/
-    base.py                   ModelClient ABC + metrics + timing
+    base.py                   ModelClient ABC + PredictionResult + metrics + timing
     model_server.py           ModelServerClient (all model containers)
     vllm.py                   VllmClient (OpenAI-compatible, sentiment + topic prompts)
   observability/
