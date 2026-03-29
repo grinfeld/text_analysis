@@ -37,8 +37,8 @@ def _mock_sentiment_models(siebert_label="POSITIVE", siebert_score=0.95):
 def _mock_topic_models():
     """Register respx mocks for all 11 topic models in config.yaml order."""
     slug_response = {"label": "financial_crime", "score": 0.87}
-    for host in ["deberta", "deberta-large", "nli-deberta", "bart",
-                 "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
+    for host in ["deberta", "deberta_large", "nli_deberta", "bart",
+                 "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
         respx.post(f"http://{host}:8000/predict").mock(
             return_value=httpx.Response(200, json=slug_response)
         )
