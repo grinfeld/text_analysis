@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
-from sentiment.clients.base import SentimentClientError
+from sentiment.clients.base import ModelClientError
 from sentiment.clients.model_server import ModelServerClient
 
 # ---------------------------------------------------------------------------
@@ -170,7 +170,7 @@ class TestModelServerClientIntegration:
             http_client=httpx.AsyncClient(),
             label_map=TINY_LABEL_MAP,
         )
-        with pytest.raises(SentimentClientError):
+        with pytest.raises(ModelClientError):
             await bad_client.predict("hello")
 
 

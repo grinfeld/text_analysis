@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt && \
     python -m textblob.download_corpora
 
-COPY server.py .
+COPY server.py handlers.py ./
 
 EXPOSE 8000
 
