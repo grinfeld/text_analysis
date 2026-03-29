@@ -249,7 +249,7 @@ Emitted per model client inside `predict()`, not at the HTTP layer.
 | `text_analysis_model_latency_seconds` | Histogram | `model`, `label` |
 | `text_analysis_model_confidence_score` | Histogram | `model`, `label` |
 
-Prometheus scrapes `http://backend:8000/metrics` every 15 s. The Grafana dashboard ("Text Analysis") is pre-provisioned — no manual setup needed.
+Prometheus scrapes `http://text-analysis-backend:8000/metrics` every 15 s. The Grafana dashboard ("Text Analysis") is pre-provisioned — no manual setup needed.
 
 ---
 
@@ -257,8 +257,10 @@ Prometheus scrapes `http://backend:8000/metrics` every 15 s. The Grafana dashboa
 
 ```
 config.yaml                   Model definitions (edit to add/remove models)
+start.sh                      Interactive launcher — prompts OS + profiles, builds image
+down.sh                       Stops all containers (all profiles)
 
-Dockerfile                    Backend image (FastAPI, uv)
+Dockerfile                    text-analysis-backend image (FastAPI, uv)
 docker-compose.yml            All services; sentiment/topic/linux profiles
                               YAML anchors (x-model-hf, x-model-zeroshot,
                               x-model-embedding, x-model-lexicon) eliminate
@@ -269,7 +271,7 @@ model_server/
   handlers.py                 TaskHandler ABC + concrete implementations
                               (TextClassification, ZeroShot, Embedding, Vader, Nrc)
   requirements.txt            All deps: transformers, sentence-transformers, nltk, nrclex
-  Dockerfile                  Single image for all model containers
+  Dockerfile                  Single image (text-analysis/model-server:latest)
   Dockerfile.vllm             vllm/vllm-openai image (Linux only)
 
 src/text_analysis/
@@ -287,11 +289,11 @@ src/text_analysis/
 
 frontend/
   static/index.html           Single-page UI — textarea + task dropdown + results table
-  nginx.conf                  Static files + /analyse proxy to backend
+  nginx.conf                  Static files + /analyse proxy to text-analysis-backend
 
 observability/
-  prometheus.yml
-  grafana/                    Pre-provisioned datasource + dashboard
+  prometheus.yml              Scrapes text-analysis-backend:8000/metrics
+  grafana/                    Pre-provisioned datasource + dashboard (Text Analysis)
 
 tests/
   conftest.py                 Fixtures: TestClient, metrics setup, CONFIG_PATH → config.yaml
