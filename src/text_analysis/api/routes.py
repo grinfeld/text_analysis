@@ -27,10 +27,14 @@ class AnalyseRequest(BaseModel):
         return v
 
 
+class LabelScore(BaseModel):
+    label: str
+    score: float
+
+
 class ModelResult(BaseModel):
     model: str
-    label: str | None = None
-    score: float | None = None
+    labels: list[LabelScore]
     latency_s: float
     error: str | None = None
 
@@ -49,8 +53,7 @@ async def analyse(req: AnalyseRequest) -> AnalyseResponse:
             latency_s = time.perf_counter() - start
             results.append(ModelResult(
                 model=client.model_name,
-                label=result.label,
-                score=result.score,
+                labels=[LabelScore(label=l, score=round(s, 2)) for l, s in result.labels],
                 latency_s=round(latency_s, 4),
             ))
         except ModelClientError as exc:
@@ -58,6 +61,7 @@ async def analyse(req: AnalyseRequest) -> AnalyseResponse:
             logger.error("model_failed", model=client.model_name, error=str(exc))
             results.append(ModelResult(
                 model=client.model_name,
+                labels=[],
                 latency_s=round(latency_s, 4),
                 error=str(exc),
             ))

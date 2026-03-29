@@ -5,45 +5,41 @@ import pytest
 import respx
 
 
+def _ms(label: str, score: float):
+    return httpx.Response(200, json={"labels": [{"label": label, "score": score}]})
+
+
+def _ms_top3(labels: list[tuple[str, float]]):
+    return httpx.Response(200, json={"labels": [{"label": l, "score": s} for l, s in labels]})
+
+
 def _mock_sentiment_models(siebert_label="POSITIVE", siebert_score=0.95):
     """Register respx mocks for all 8 sentiment models in config.yaml order."""
     content = json.dumps({"label": "positive", "score": 0.88})
     respx.post("http://siebert:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": siebert_label, "score": siebert_score})
+        return_value=_ms(siebert_label, siebert_score)
     )
-    respx.post("http://cardiffnlp:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
-    )
-    respx.post("http://distilbert:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": "positive", "score": 0.75})
-    )
-    respx.post("http://nrc:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
-    )
-    respx.post("http://vader:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": "positive", "score": 0.91})
-    )
-    respx.post("http://finbert:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": "positive", "score": 0.82})
-    )
-    respx.post("http://nlptown:8000/predict").mock(
-        return_value=httpx.Response(200, json={"label": "5 stars", "score": 0.71})
-    )
+    respx.post("http://cardiffnlp:8000/predict").mock(return_value=_ms("positive", 0.80))
+    respx.post("http://distilbert:8000/predict").mock(return_value=_ms("positive", 0.75))
+    respx.post("http://nrc:8000/predict").mock(return_value=_ms("positive", 0.80))
+    respx.post("http://vader:8000/predict").mock(return_value=_ms("positive", 0.91))
+    respx.post("http://finbert:8000/predict").mock(return_value=_ms("positive", 0.82))
+    respx.post("http://nlptown:8000/predict").mock(return_value=_ms("5 stars", 0.71))
     respx.post("http://localhost:8900/v1/chat/completions").mock(
         return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
     )
 
 
+_TOP3 = [("financial_crime", 0.87), ("money_laundering", 0.60), ("sanctions_evasion", 0.40)]
+
+
 def _mock_topic_models():
     """Register respx mocks for all 11 topic models in config.yaml order."""
-    slug_response = {"label": "financial_crime", "score": 0.87}
     for host in ["deberta", "deberta_large", "nli_deberta", "bart",
                  "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
-        respx.post(f"http://{host}:8000/predict").mock(
-            return_value=httpx.Response(200, json=slug_response)
-        )
-    # vllm is shared — mock once, covers both sentiment and topic calls
-    content = json.dumps({"label": "financial_crime", "score": 0.91})
+        respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
+    # vllm topic returns labels list
+    content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
     respx.post("http://localhost:8900/v1/chat/completions").mock(
         return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
     )
@@ -76,32 +72,21 @@ class TestAnalyseSentimentEndpoint:
             assert "model" in r
             assert "latency_s" in r
             assert r.get("error") is None
-            assert r["label"] in ("positive", "neutral", "negative")
-            assert 0.0 <= r["score"] <= 1.0
+            assert len(r["labels"]) == 1
+            assert r["labels"][0]["label"] in ("positive", "neutral", "negative")
+            assert 0.0 <= r["labels"][0]["score"] <= 1.0
 
     @respx.mock
     def test_failed_model_does_not_abort_response(self, client):
         respx.post("http://siebert:8000/predict").mock(
             side_effect=httpx.ConnectError("connection refused")
         )
-        respx.post("http://cardiffnlp:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
-        )
-        respx.post("http://distilbert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.75})
-        )
-        respx.post("http://nrc:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.80})
-        )
-        respx.post("http://vader:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.91})
-        )
-        respx.post("http://finbert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "positive", "score": 0.82})
-        )
-        respx.post("http://nlptown:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "5 stars", "score": 0.71})
-        )
+        respx.post("http://cardiffnlp:8000/predict").mock(return_value=_ms("positive", 0.80))
+        respx.post("http://distilbert:8000/predict").mock(return_value=_ms("positive", 0.75))
+        respx.post("http://nrc:8000/predict").mock(return_value=_ms("positive", 0.80))
+        respx.post("http://vader:8000/predict").mock(return_value=_ms("positive", 0.91))
+        respx.post("http://finbert:8000/predict").mock(return_value=_ms("positive", 0.82))
+        respx.post("http://nlptown:8000/predict").mock(return_value=_ms("5 stars", 0.71))
         content = json.dumps({"label": "positive", "score": 0.88})
         respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
@@ -112,7 +97,7 @@ class TestAnalyseSentimentEndpoint:
         assert len(results) == 8
         siebert = next(r for r in results if r["model"] == "siebert/sentiment-roberta-large-english")
         assert siebert["error"] is not None
-        assert siebert["label"] is None
+        assert siebert["labels"] == []
 
     @respx.mock
     def test_results_in_config_order(self, client):
@@ -180,7 +165,8 @@ class TestAnalyseTopicEndpoint:
         assert resp.status_code == 200
         for r in resp.json()["results"]:
             assert r.get("error") is None
-            assert r["label"] == "financial_crime"
+            assert r["labels"][0]["label"] == "financial_crime"
+            assert len(r["labels"]) == 3
 
     @respx.mock
     def test_topic_results_in_config_order(self, client):
@@ -200,6 +186,25 @@ class TestAnalyseTopicEndpoint:
             "intfloat/e5-large-v2",
             "vllm",
         ]
+
+    @respx.mock
+    def test_failed_topic_model_returns_empty_labels(self, client):
+        respx.post("http://deberta:8000/predict").mock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
+        for host in ["deberta_large", "nli_deberta", "bart",
+                     "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
+            respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
+        content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        )
+        resp = client.post("/analyse", json={"text": "Shell company.", "for": "topic"})
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        deberta = next(r for r in results if r["model"] == "MoritzLaurer/deberta-v3-base-zeroshot-v1")
+        assert deberta["error"] is not None
+        assert deberta["labels"] == []
 
     def test_default_for_is_sentiment(self, client):
         # When 'for' is omitted, sentiment models run (not topic)

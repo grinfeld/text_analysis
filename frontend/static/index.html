@@ -226,23 +226,29 @@
     }
 
     function renderRow(r) {
-      if (r.error) {
+      const ms = (r.latency_s * 1000).toFixed(0) + " ms";
+      if (r.error || r.labels.length === 0) {
         return `<tr>
           <td><span class="model-name">${r.model}</span></td>
           <td><span class="label-badge error">error</span></td>
-          <td colspan="2"><span class="error-msg">${r.error}</span></td>
+          <td colspan="2"><span class="error-msg">${r.error || "no result"}</span></td>
         </tr>`;
       }
-      const pct = (r.score * 100).toFixed(1) + "%";
-      const ms = (r.latency_s * 1000).toFixed(0) + " ms";
-      const badgeClass = SENTIMENT_LABELS.has(r.label) ? r.label : "topic-label";
-      const displayLabel = r.label.replace(/_/g, " ");
-      return `<tr>
-        <td><span class="model-name">${r.model}</span></td>
-        <td><span class="label-badge ${badgeClass}">${displayLabel}</span></td>
-        <td class="score">${pct}</td>
-        <td class="latency">${ms}</td>
-      </tr>`;
+      const rowspan = r.labels.length;
+      return r.labels.map((item, i) => {
+        const badgeClass = SENTIMENT_LABELS.has(item.label) ? item.label : "topic-label";
+        const badge = `<span class="label-badge ${badgeClass}">${item.label.replace(/_/g, " ")}</span>`;
+        const pct = (item.score * 100).toFixed(1) + "%";
+        if (i === 0) {
+          return `<tr>
+            <td rowspan="${rowspan}"><span class="model-name">${r.model}</span></td>
+            <td>${badge}</td>
+            <td class="score">${pct}</td>
+            <td rowspan="${rowspan}" class="latency">${ms}</td>
+          </tr>`;
+        }
+        return `<tr><td>${badge}</td><td class="score">${pct}</td></tr>`;
+      }).join("");
     }
 
     document.getElementById("text-input").addEventListener("keydown", (e) => {

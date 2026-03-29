@@ -118,14 +118,15 @@ class TestModelServerContainer:
         assert data["status"] == "ok"
         assert data["model"] == TINY_MODEL
 
-    def test_predict_returns_label_and_score(self, model_server_url):
+    def test_predict_returns_labels(self, model_server_url):
         resp = httpx.post(f"{model_server_url}/predict", json={"text": "I love this!"})
         assert resp.status_code == 200
         data = resp.json()
-        assert "label" in data
-        assert "score" in data
-        assert isinstance(data["label"], str)
-        assert 0.0 <= data["score"] <= 1.0
+        assert "labels" in data
+        assert len(data["labels"]) >= 1
+        top = data["labels"][0]
+        assert isinstance(top["label"], str)
+        assert 0.0 <= top["score"] <= 1.0
 
     def test_predict_empty_text_returns_422(self, model_server_url):
         resp = httpx.post(f"{model_server_url}/predict", json={"text": "   "})
@@ -140,7 +141,7 @@ class TestModelServerContainer:
             resp = httpx.post(f"{model_server_url}/predict", json={"text": text})
             assert resp.status_code == 200
             data = resp.json()
-            assert 0.0 <= data["score"] <= 1.0
+            assert 0.0 <= data["labels"][0]["score"] <= 1.0
 
 
 # ---------------------------------------------------------------------------
@@ -156,8 +157,8 @@ class TestModelServerClientIntegration:
 
     async def test_predict_raw_contains_original_response(self, hf_integration_client):
         result = await hf_integration_client.predict("Hello world")
-        assert "label" in result.raw
-        assert "score" in result.raw
+        assert "labels" in result.raw
+        assert isinstance(result.raw["labels"], list)
 
     async def test_predict_normalises_raw_label(self, hf_integration_client):
         result = await hf_integration_client.predict("Some text to classify.")
@@ -235,8 +236,9 @@ class TestBackendWithRealModelServer:
         assert len(results) == 1
         r = results[0]
         assert r["model"] == "siebert/sentiment-roberta-large-english"
-        assert r["label"] in ("positive", "negative", "neutral")
-        assert 0.0 <= r["score"] <= 1.0
+        assert len(r["labels"]) == 1
+        assert r["labels"][0]["label"] in ("positive", "negative", "neutral")
+        assert 0.0 <= r["labels"][0]["score"] <= 1.0
         assert r["error"] is None
 
     async def test_empty_text_still_422_with_real_model(self, client_with_real_model):

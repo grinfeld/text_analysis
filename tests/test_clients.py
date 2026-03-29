@@ -59,11 +59,15 @@ def vllm_topic_client(vllm_http):
     )
 
 
+def _ms_response(labels: list[dict]) -> httpx.Response:
+    return httpx.Response(200, json={"labels": labels})
+
+
 class TestModelServerClient:
     @respx.mock
     async def test_predict_positive(self, siebert_client):
         respx.post("http://siebert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "POSITIVE", "score": 0.98})
+            return_value=_ms_response([{"label": "POSITIVE", "score": 0.98}])
         )
         result = await siebert_client.predict("I love this!")
         assert result.label == "positive"
@@ -72,7 +76,7 @@ class TestModelServerClient:
     @respx.mock
     async def test_predict_negative(self, siebert_client):
         respx.post("http://siebert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "NEGATIVE", "score": 0.92})
+            return_value=_ms_response([{"label": "NEGATIVE", "score": 0.92}])
         )
         result = await siebert_client.predict("This is terrible.")
         assert result.label == "negative"
@@ -102,14 +106,22 @@ class TestModelServerClient:
     @respx.mock
     async def test_unknown_label_falls_back_to_neutral(self, siebert_client):
         respx.post("http://siebert:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "UNKNOWN_LABEL", "score": 0.5})
+            return_value=_ms_response([{"label": "UNKNOWN_LABEL", "score": 0.5}])
         )
         result = await siebert_client.predict("hmm")
         assert result.label == "neutral"
 
     @respx.mock
+    async def test_empty_labels_list_raises_client_error(self, siebert_client):
+        respx.post("http://siebert:8000/predict").mock(
+            return_value=httpx.Response(200, json={"labels": []})
+        )
+        with pytest.raises(ModelClientError):
+            await siebert_client.predict("hello")
+
+    @respx.mock
     async def test_empty_label_map_passes_label_through(self, hf_http):
-        # Zero-shot models have no label_map — raw label is returned as-is
+        # Zero-shot models have no label_map — raw labels are returned as-is
         client = ModelServerClient(
             model_name="deberta",
             base_url="http://deberta:8000",
@@ -118,18 +130,27 @@ class TestModelServerClient:
             task="topic",
         )
         respx.post("http://deberta:8000/predict").mock(
-            return_value=httpx.Response(200, json={"label": "financial_crime", "score": 0.91})
+            return_value=_ms_response([
+                {"label": "financial_crime", "score": 0.91},
+                {"label": "money_laundering", "score": 0.65},
+                {"label": "sanctions_evasion", "score": 0.42},
+            ])
         )
         result = await client.predict("Shell company transferred funds offshore.")
         assert result.label == "financial_crime"
+        assert len(result.labels) == 3
+        assert result.labels[1] == ("money_laundering", pytest.approx(0.65))
 
 
 class TestVllmClient:
     def _make_vllm_response(self, label: str, score: float) -> httpx.Response:
         content = json.dumps({"label": label, "score": score})
-        body = {
-            "choices": [{"message": {"content": content}}]
-        }
+        body = {"choices": [{"message": {"content": content}}]}
+        return httpx.Response(200, json=body)
+
+    def _make_vllm_topic_response(self, labels: list[dict]) -> httpx.Response:
+        content = json.dumps({"labels": labels})
+        body = {"choices": [{"message": {"content": content}}]}
         return httpx.Response(200, json=body)
 
     @respx.mock
@@ -183,27 +204,46 @@ class TestVllmClient:
         assert result.score == pytest.approx(1.0)
 
     @respx.mock
-    async def test_topic_valid_slug_passes_through(self, vllm_topic_client):
+    async def test_topic_returns_ranked_list(self, vllm_topic_client):
         respx.post("http://localhost:8900/v1/chat/completions").mock(
-            return_value=self._make_vllm_response("financial_crime", 0.88)
+            return_value=self._make_vllm_topic_response([
+                {"label": "financial_crime", "score": 0.88},
+                {"label": "money_laundering", "score": 0.65},
+                {"label": "sanctions_evasion", "score": 0.42},
+            ])
         )
         result = await vllm_topic_client.predict("Shell company transferred funds offshore.")
         assert result.label == "financial_crime"
+        assert len(result.labels) == 3
+        assert result.labels[1] == ("money_laundering", pytest.approx(0.65))
+
+    @respx.mock
+    async def test_missing_score_raises_client_error(self, vllm_client):
+        content = json.dumps({"label": "positive"})  # no "score"
+        body = {"choices": [{"message": {"content": content}}]}
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json=body)
+        )
+        with pytest.raises(ModelClientError):
+            await vllm_client.predict("hello")
+
+    @respx.mock
+    async def test_topic_empty_labels_list_raises_client_error(self, vllm_topic_client):
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=self._make_vllm_topic_response([])
+        )
+        with pytest.raises(ModelClientError):
+            await vllm_topic_client.predict("hello")
 
     @respx.mock
     async def test_topic_novel_slug_passes_through(self, vllm_topic_client):
         # Open-ended topic mode accepts any slug the model proposes
         respx.post("http://localhost:8900/v1/chat/completions").mock(
-            return_value=self._make_vllm_response("border_security", 0.82)
+            return_value=self._make_vllm_topic_response([
+                {"label": "border_security", "score": 0.82},
+                {"label": "covert_operation", "score": 0.50},
+                {"label": "recruitment", "score": 0.30},
+            ])
         )
         result = await vllm_topic_client.predict("Customs officials intercepted a vehicle at the border.")
         assert result.label == "border_security"
-
-    @respx.mock
-    async def test_topic_empty_label_passes_through(self, vllm_topic_client):
-        # When no topic applies the model returns empty string — pass through as-is
-        respx.post("http://localhost:8900/v1/chat/completions").mock(
-            return_value=self._make_vllm_response("", 0.0)
-        )
-        result = await vllm_topic_client.predict("Hello world.")
-        assert result.label == ""

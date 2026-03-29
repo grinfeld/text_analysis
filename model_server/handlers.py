@@ -17,7 +17,7 @@ class TaskHandler(ABC):
     def warmup(self) -> None: ...
 
     @abstractmethod
-    def predict(self, text: str) -> tuple[str, float]: ...
+    def predict(self, text: str) -> list[tuple[str, float]]: ...
 
 
 class TextClassificationHandler(TaskHandler):
@@ -32,10 +32,10 @@ class TextClassificationHandler(TaskHandler):
     def warmup(self) -> None:
         self._pipeline("warmup")
 
-    def predict(self, text: str) -> tuple[str, float]:
+    def predict(self, text: str) -> list[tuple[str, float]]:
         results = self._pipeline(text)
         top = results[0][0] if isinstance(results[0], list) else results[0]
-        return top["label"], top["score"]
+        return [(top["label"], top["score"])]
 
 
 class ZeroShotClassificationHandler(TaskHandler):
@@ -52,9 +52,9 @@ class ZeroShotClassificationHandler(TaskHandler):
     def warmup(self) -> None:
         self._pipeline("warmup text", candidate_labels=_CANDIDATE_LABELS)
 
-    def predict(self, text: str) -> tuple[str, float]:
+    def predict(self, text: str) -> list[tuple[str, float]]:
         result = self._pipeline(text, candidate_labels=_CANDIDATE_LABELS)
-        return result["labels"][0], result["scores"][0]
+        return list(zip(result["labels"][:3], result["scores"][:3]))
 
 
 class EmbeddingHandler(TaskHandler):
@@ -76,12 +76,12 @@ class EmbeddingHandler(TaskHandler):
     def warmup(self) -> None:
         self._model.encode(["warmup"], normalize_embeddings=True)
 
-    def predict(self, text: str) -> tuple[str, float]:
+    def predict(self, text: str) -> list[tuple[str, float]]:
         import numpy as np
         text_emb = self._model.encode([text], normalize_embeddings=True)[0]
         sims = self._label_embeddings @ text_emb
-        best = int(np.argmax(sims))
-        return _CANDIDATE_LABELS[best], round(float(sims[best]), 4)
+        top3_idx = np.argsort(sims)[::-1][:3]
+        return [(_CANDIDATE_LABELS[i], round(float(sims[i]), 4)) for i in top3_idx]
 
 
 class VaderHandler(TaskHandler):
@@ -96,7 +96,7 @@ class VaderHandler(TaskHandler):
     def warmup(self) -> None:
         self._analyzer.polarity_scores("warmup")
 
-    def predict(self, text: str) -> tuple[str, float]:
+    def predict(self, text: str) -> list[tuple[str, float]]:
         compound = self._analyzer.polarity_scores(text)["compound"]
         if compound >= 0.05:
             label = "positive"
@@ -104,7 +104,7 @@ class VaderHandler(TaskHandler):
             label = "negative"
         else:
             label = "neutral"
-        return label, round(abs(compound), 4)
+        return [(label, round(abs(compound), 4))]
 
 
 class NrcHandler(TaskHandler):
@@ -119,18 +119,18 @@ class NrcHandler(TaskHandler):
     def warmup(self) -> None:
         self.predict("warmup")
 
-    def predict(self, text: str) -> tuple[str, float]:
+    def predict(self, text: str) -> list[tuple[str, float]]:
         scores = self._NRCLex(text).raw_emotion_scores
         pos = sum(scores.get(e, 0) for e in self._POSITIVE)
         neg = sum(scores.get(e, 0) for e in self._NEGATIVE)
         total = pos + neg
         if total == 0:
-            return "neutral", 0.0
+            return [("neutral", 0.0)]
         if pos > neg:
-            return "positive", round(pos / total, 4)
+            return [("positive", round(pos / total, 4))]
         if neg > pos:
-            return "negative", round(neg / total, 4)
-        return "neutral", 0.5
+            return [("negative", round(neg / total, 4))]
+        return [("neutral", 0.5)]
 
 
 HANDLERS: dict[str, type[TaskHandler]] = {

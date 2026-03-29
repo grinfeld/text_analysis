@@ -16,9 +16,16 @@ class ModelClientError(Exception):
 
 @dataclass(frozen=True)
 class PredictionResult:
-    label: str
-    score: float  # 0.0–1.0 confidence
+    labels: list[tuple[str, float]]  # ranked list of (label, score), best first
     raw: dict[str, Any]
+
+    @property
+    def label(self) -> str:
+        return self.labels[0][0]
+
+    @property
+    def score(self) -> float:
+        return self.labels[0][1]
 
 
 class ModelClient(ABC):

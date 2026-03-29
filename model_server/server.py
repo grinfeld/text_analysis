@@ -38,17 +38,21 @@ class PredictRequest(BaseModel):
     text: str
 
 
-class PredictResponse(BaseModel):
+class LabelScore(BaseModel):
     label: str
     score: float
+
+
+class PredictResponse(BaseModel):
+    labels: list[LabelScore]
 
 
 @app.post("/predict", response_model=PredictResponse)
 def predict(req: PredictRequest) -> PredictResponse:
     if not req.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
-    label, score = _handler.predict(req.text)
-    return PredictResponse(label=label, score=score)
+    results = _handler.predict(req.text)
+    return PredictResponse(labels=[LabelScore(label=l, score=s) for l, s in results])
 
 
 @app.get("/health")

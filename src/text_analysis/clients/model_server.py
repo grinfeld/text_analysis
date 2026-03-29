@@ -24,7 +24,6 @@ class ModelServerClient(ModelClient):
 
     def _normalise_label(self, raw_label: str) -> str:
         if not self._label_map:
-            # No mapping configured — return label as-is (e.g. topic slugs)
             return raw_label
         normalised = self._label_map.get(raw_label) or self._label_map.get(raw_label.lower())
         if normalised is None:
@@ -48,15 +47,20 @@ class ModelServerClient(ModelClient):
 
         try:
             data: dict = response.json()
-            raw_label: str = data["label"]
-            score: float = float(data["score"])
+            raw_labels: list[dict] = data["labels"]
+            if not raw_labels:
+                raise ModelClientError(
+                    f"Empty labels list from {url}: {response.text!r}"
+                )
+            labels = [
+                (self._normalise_label(item["label"]), float(item["score"]))
+                for item in raw_labels
+            ]
+        except ModelClientError:
+            raise
         except (KeyError, ValueError, TypeError) as exc:
             raise ModelClientError(
                 f"Unexpected response shape from {url}: {response.text!r}"
             ) from exc
 
-        return PredictionResult(
-            label=self._normalise_label(raw_label),
-            score=score,
-            raw=data,
-        )
+        return PredictionResult(labels=labels, raw=data)

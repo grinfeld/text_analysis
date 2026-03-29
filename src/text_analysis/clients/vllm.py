@@ -31,7 +31,7 @@ SENTIMENT_VALID_LABELS: frozenset[str] = frozenset({"positive", "neutral", "nega
 TOPIC_SYSTEM_PROMPT = "You are a precise topic classifier that outputs only valid JSON."
 
 TOPIC_USER_PROMPT_TEMPLATE = """\
-Classify the topic of the text below.
+Classify the topic of the text below. Return the top 3 most relevant topics ranked by confidence.
 
 Use one of these example slugs if it fits, or propose your own snake_case slug if none of them applies:
 arms_trafficking, financial_crime, surveillance_operation, human_intelligence,
@@ -39,15 +39,12 @@ signals_intelligence, covert_operation, money_laundering, sanctions_evasion,
 recruitment, daily_reporting, network_configuration, routing, administrative,
 organizational_structure, spatial_context, temporal_reference
 
-If the text has no clear topic, set "label" to an empty string.
-
-Respond with a JSON object containing exactly two fields:
-- "label": a snake_case topic slug, or an empty string if no topic applies
-- "score": a float between 0.0 and 1.0 representing your confidence
+Respond with a JSON object containing exactly one field:
+- "labels": an array of exactly 3 objects, each with "label" (snake_case slug) and "score" (float 0.0–1.0), ranked from most to least confident
 
 Do not include any explanation or extra text — only the JSON object.
 
-Example output: {{"label": "financial_crime", "score": 0.88}}
+Example output: {{"labels": [{{"label": "financial_crime", "score": 0.88}}, {{"label": "money_laundering", "score": 0.65}}, {{"label": "sanctions_evasion", "score": 0.42}}]}}
 
 Text: {text}"""
 
@@ -83,7 +80,7 @@ class VllmClient(ModelClient):
                 {"role": "user", "content": self._user_prompt_template.format(text=text)},
             ],
             "temperature": 0.0,
-            "max_tokens": 64,
+            "max_tokens": 200,
             "response_format": {"type": "json_object"},
         }
 
@@ -103,19 +100,43 @@ class VllmClient(ModelClient):
             body = response.json()
             content: str = body["choices"][0]["message"]["content"]
             parsed: dict = json.loads(content)
-            raw_label: str = parsed["label"]
-            score: float = float(parsed.get("score", 0.9))
         except (KeyError, IndexError, json.JSONDecodeError, ValueError, TypeError) as exc:
             raise ModelClientError(
                 f"Failed to parse vLLM response: {response.text!r}"
             ) from exc
 
-        label = raw_label.lower().strip()
-        if self._valid_labels and label not in self._valid_labels:
-            logger.warning("vllm_unknown_label", raw_label=raw_label, task=self.task, fallback="neutral")
-            label = "neutral"
-        # open-ended mode (empty valid_labels): pass label through as-is, including empty string
+        if "labels" in parsed:
+            # Topic mode — ranked list of {label, score}
+            try:
+                raw_list = parsed["labels"]
+                if not raw_list:
+                    raise ModelClientError(
+                        f"vLLM returned empty labels list: {response.text!r}"
+                    )
+                labels = [
+                    (item["label"].lower().strip(), max(0.0, min(1.0, float(item["score"]))))
+                    for item in raw_list
+                ]
+            except ModelClientError:
+                raise
+            except (KeyError, ValueError, TypeError) as exc:
+                raise ModelClientError(
+                    f"Failed to parse vLLM labels list: {response.text!r}"
+                ) from exc
+        else:
+            # Sentiment mode — single {label, score}
+            try:
+                raw_label: str = parsed["label"]
+                score: float = float(parsed["score"])
+            except (KeyError, ValueError, TypeError) as exc:
+                raise ModelClientError(
+                    f"Failed to parse vLLM response: {response.text!r}"
+                ) from exc
+            label = raw_label.lower().strip()
+            if self._valid_labels and label not in self._valid_labels:
+                logger.warning("vllm_unknown_label", raw_label=raw_label, task=self.task, fallback="neutral")
+                label = "neutral"
+            score = max(0.0, min(1.0, score))
+            labels = [(label, score)]
 
-        score = max(0.0, min(1.0, score))
-
-        return PredictionResult(label=label, score=score, raw=body)
+        return PredictionResult(labels=labels, raw=body)

@@ -1,6 +1,6 @@
 # Text Analysis — Learning Project
 
-A full-stack text analysis playground. Enter text, choose a task (Sentiment or Topic), and all configured models run simultaneously — results are returned side-by-side with model name, label, confidence score, and inference latency.
+A full-stack text analysis playground. Enter text, choose a task (Sentiment or Topic), and all configured models run simultaneously — results are returned side-by-side with model name, ranked labels, confidence scores, and inference latency.
 
 Stack: FastAPI · HuggingFace Transformers · sentence-transformers · NLTK VADER · NRC Emotion Lexicon · mlx-lm (macOS) / vLLM (Linux) · OpenTelemetry · Prometheus · Grafana
 
@@ -94,7 +94,7 @@ First run downloads model weights — this can take several minutes. VADER and N
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Frontend | http://localhost | Single-page UI |
+| Frontend | http://localhost:8080 | Single-page UI |
 | Backend API | http://localhost:8000 | FastAPI — `POST /analyse` |
 | Prometheus | http://localhost:9090 | Metrics scraper |
 | Grafana | http://localhost:3000 | Dashboard (admin / admin) |
@@ -118,13 +118,29 @@ Response:
 ```json
 {
   "results": [
-    { "model": "siebert/sentiment-roberta-large-english", "label": "positive", "score": 0.9987, "latency_s": 0.31, "error": null },
-    { "model": "vllm",                                    "label": "positive", "score": 0.85,   "latency_s": 2.1,  "error": null }
+    {
+      "model": "siebert/sentiment-roberta-large-english",
+      "labels": [{ "label": "positive", "score": 0.99 }],
+      "latency_s": 0.31,
+      "error": null
+    },
+    {
+      "model": "MoritzLaurer/deberta-v3-base-zeroshot-v1",
+      "labels": [
+        { "label": "financial_crime", "score": 0.87 },
+        { "label": "money_laundering", "score": 0.60 },
+        { "label": "sanctions_evasion", "score": 0.40 }
+      ],
+      "latency_s": 1.2,
+      "error": null
+    }
   ]
 }
 ```
 
-Models run sequentially in the order defined in `config.yaml`. A failed model returns `error: "<message>"` with `label`/`score` null — it does not abort the rest.
+All models return `labels` as a ranked list. Sentiment models return one entry; topic models return up to 3. A failed model returns `labels: []` and `error: "<message>"` — it does not abort the rest.
+
+Models run sequentially in the order defined in `config.yaml`.
 
 ---
 
@@ -175,21 +191,21 @@ Classify directly against taxonomy slugs as candidate labels:
 |------|-----------|-------|
 | `MoritzLaurer/deberta-v3-base-zeroshot-v1` | `deberta` | DeBERTa, 86M, recommended small zero-shot |
 | `MoritzLaurer/deberta-v3-large-zeroshot-v1` | `deberta_large` | DeBERTa, 400M, higher accuracy |
-| `cross-encoder/nli-deberta-v3-large` | `nli-deberta` | NLI cross-encoder, 400M |
+| `cross-encoder/nli-deberta-v3-large` | `nli_deberta` | NLI cross-encoder, 400M |
 | `facebook/bart-large-mnli` | `bart` | BART, 400M, widely-used zero-shot baseline |
 
 ### Topic — embedding similarity (`for: topic`, profile: `topic`)
 
-Embed text and find nearest topic slug by cosine similarity:
+Embed text and find nearest topic slugs by cosine similarity (top 3 returned):
 
 | Name | Container | Notes |
 |------|-----------|-------|
-| `BAAI/bge-small-en-v1.5` | `bge-small` | 33M, recommended default embedder |
-| `BAAI/bge-large-en-v1.5` | `bge-large` | 335M, higher accuracy |
+| `BAAI/bge-small-en-v1.5` | `bge_small` | 33M, recommended default embedder |
+| `BAAI/bge-large-en-v1.5` | `bge_large` | 335M, higher accuracy |
 | `sentence-transformers/all-MiniLM-L6-v2` | `minilm` | 22M, fastest |
 | `sentence-transformers/all-mpnet-base-v2` | `mpnet` | 110M, good mid-tier |
-| `intfloat/e5-small-v2` | `e5-small` | 33M, retrieval-focused |
-| `intfloat/e5-large-v2` | `e5-large` | 335M, best E5 variant |
+| `intfloat/e5-small-v2` | `e5_small` | 33M, retrieval-focused |
+| `intfloat/e5-large-v2` | `e5_large` | 335M, best E5 variant |
 
 ### LLM (`for: llm`, shared for both tasks)
 
@@ -197,7 +213,7 @@ Embed text and find nearest topic slug by cosine similarity:
 |------|-----------|-------|
 | `vllm` | host / `vllm` | Qwen2.5-7B-Instruct via mlx-lm (macOS) or vLLM container (Linux) |
 
-A single config entry registers two clients — one uses the sentiment prompt (closed labels: positive / neutral / negative), the other uses the topic prompt (open-ended: example slugs provided, model may propose novel ones).
+A single config entry registers two clients — one uses the sentiment prompt (returns single label: positive / neutral / negative), the other uses the topic prompt (returns ranked top-3 slugs).
 
 ### Topic taxonomy
 
@@ -223,7 +239,15 @@ Handler classes are defined in `model_server/handlers.py`; `model_server/server.
 
 `CANDIDATE_LABELS` is a comma-separated string of classification targets.
 
-The Docker image is built once (on the first service that declares `build:` for each profile) and reused by all other model containers via `image: text-analysis/model-server:latest`.
+The `/predict` endpoint always returns:
+
+```json
+{ "labels": [{ "label": "...", "score": 0.87 }, ...] }
+```
+
+Single-label handlers (text-classification, vader, nrc) return a one-item list. Zero-shot and embedding handlers return top-3.
+
+The Docker image is built once and reused by all model containers via `image: text-analysis/model-server:latest`.
 
 ---
 
