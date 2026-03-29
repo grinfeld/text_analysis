@@ -67,11 +67,11 @@ models:
 
   # ── Topic models ──────────────────────────────────────────────────────────
 
-  # Embedding similarity (cosine against slug label strings)
-  - name: BAAI/bge-small-en-v1.5
+  # Zero-shot NLI classifiers
+  - name: MoritzLaurer/deberta-v3-base-zeroshot-v1
     for: topic
     type: ml
-    url: http://bge_small:8000
+    url: http://deberta:8000
     candidate_labels: &topic_labels
       - arms_trafficking
       - financial_crime
@@ -89,6 +89,31 @@ models:
       - organizational_structure
       - spatial_context
       - temporal_reference
+
+  - name: MoritzLaurer/deberta-v3-large-zeroshot-v1
+    for: topic
+    type: ml
+    url: http://deberta_large:8000
+    candidate_labels: *topic_labels
+
+  - name: cross-encoder/nli-deberta-v3-large
+    for: topic
+    type: ml
+    url: http://nli_deberta:8000
+    candidate_labels: *topic_labels
+
+  - name: facebook/bart-large-mnli
+    for: topic
+    type: ml
+    url: http://bart:8000
+    candidate_labels: *topic_labels
+
+  # Embedding similarity (cosine against slug label strings)
+  - name: BAAI/bge-small-en-v1.5
+    for: topic
+    type: ml
+    url: http://bge_small:8000
+    candidate_labels: *topic_labels
 
   - name: BAAI/bge-large-en-v1.5
     for: topic

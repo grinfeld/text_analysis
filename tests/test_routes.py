@@ -35,8 +35,9 @@ _TOP3 = [("financial_crime", 0.87), ("money_laundering", 0.60), ("sanctions_evas
 
 
 def _mock_topic_models():
-    """Register respx mocks for all 7 topic models in config.yaml order."""
-    for host in ["bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
+    """Register respx mocks for all 11 topic models in config.yaml order."""
+    for host in ["deberta", "deberta_large", "nli_deberta", "bart",
+                 "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
         respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
     # vllm topic returns labels list
     content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
@@ -135,8 +136,12 @@ class TestAnalyseTopicEndpoint:
         resp = client.post("/analyse", json={"text": "Shell company transferred funds.", "for": "topic"})
         assert resp.status_code == 200
         results = resp.json()["results"]
-        assert len(results) == 7
+        assert len(results) == 11
         models = [r["model"] for r in results]
+        assert "MoritzLaurer/deberta-v3-base-zeroshot-v1" in models
+        assert "MoritzLaurer/deberta-v3-large-zeroshot-v1" in models
+        assert "cross-encoder/nli-deberta-v3-large" in models
+        assert "facebook/bart-large-mnli" in models
         assert "BAAI/bge-small-en-v1.5" in models
         assert "BAAI/bge-large-en-v1.5" in models
         assert "sentence-transformers/all-MiniLM-L6-v2" in models
@@ -170,6 +175,10 @@ class TestAnalyseTopicEndpoint:
         resp = client.post("/analyse", json={"text": "Some text.", "for": "topic"})
         models = [r["model"] for r in resp.json()["results"]]
         assert models == [
+            "MoritzLaurer/deberta-v3-base-zeroshot-v1",
+            "MoritzLaurer/deberta-v3-large-zeroshot-v1",
+            "cross-encoder/nli-deberta-v3-large",
+            "facebook/bart-large-mnli",
             "BAAI/bge-small-en-v1.5",
             "BAAI/bge-large-en-v1.5",
             "sentence-transformers/all-MiniLM-L6-v2",
@@ -181,10 +190,11 @@ class TestAnalyseTopicEndpoint:
 
     @respx.mock
     def test_failed_topic_model_returns_empty_labels(self, client):
-        respx.post("http://bge_small:8000/predict").mock(
+        respx.post("http://deberta:8000/predict").mock(
             side_effect=httpx.ConnectError("connection refused")
         )
-        for host in ["bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
+        for host in ["deberta_large", "nli_deberta", "bart",
+                     "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
             respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
         content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
         respx.post("http://localhost:8900/v1/chat/completions").mock(
@@ -193,9 +203,9 @@ class TestAnalyseTopicEndpoint:
         resp = client.post("/analyse", json={"text": "Shell company.", "for": "topic"})
         assert resp.status_code == 200
         results = resp.json()["results"]
-        bge_small = next(r for r in results if r["model"] == "BAAI/bge-small-en-v1.5")
-        assert bge_small["error"] is not None
-        assert bge_small["labels"] == []
+        deberta = next(r for r in results if r["model"] == "MoritzLaurer/deberta-v3-base-zeroshot-v1")
+        assert deberta["error"] is not None
+        assert deberta["labels"] == []
 
     def test_default_for_is_sentiment(self, client):
         # When 'for' is omitted, sentiment models run (not topic)
