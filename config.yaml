@@ -1,5 +1,8 @@
 models:
+  # ── Sentiment models ──────────────────────────────────────────────────────
+
   - name: siebert/sentiment-roberta-large-english
+    for: sentiment
     type: ml
     url: http://siebert:8000
     labels:
@@ -7,6 +10,7 @@ models:
       NEGATIVE: negative
 
   - name: cardiffnlp/twitter-roberta-base-sentiment-latest
+    for: sentiment
     type: ml
     url: http://cardiffnlp:8000
     labels:
@@ -15,6 +19,7 @@ models:
       negative: negative
 
   - name: lxyuan/distilbert-base-multilingual-cased-sentiments-student
+    for: sentiment
     type: ml
     url: http://distilbert:8000
     labels:
@@ -23,6 +28,7 @@ models:
       negative: negative
 
   - name: nrc
+    for: sentiment
     type: ml
     url: http://nrc:8000
     labels:
@@ -31,6 +37,7 @@ models:
       neutral: neutral
 
   - name: vader
+    for: sentiment
     type: ml
     url: http://vader:8000
     labels:
@@ -39,6 +46,7 @@ models:
       neutral: neutral
 
   - name: ProsusAI/finbert
+    for: sentiment
     type: ml
     url: http://finbert:8000
     labels:
@@ -47,6 +55,7 @@ models:
       neutral: neutral
 
   - name: nlptown/bert-base-multilingual-uncased-sentiment
+    for: sentiment
     type: ml
     url: http://nlptown:8000
     labels:
@@ -56,7 +65,64 @@ models:
       "4 stars": positive
       "5 stars": positive
 
+  # ── Topic models ──────────────────────────────────────────────────────────
+
+  # Tier 2 — zero-shot NLI classifiers
+  - name: MoritzLaurer/deberta-v3-base-zeroshot-v1
+    for: topic
+    type: ml
+    url: http://deberta:8000
+
+  - name: MoritzLaurer/deberta-v3-large-zeroshot-v2
+    for: topic
+    type: ml
+    url: http://deberta-large:8000
+
+  - name: cross-encoder/nli-deberta-v3-large
+    for: topic
+    type: ml
+    url: http://nli-deberta:8000
+
+  - name: facebook/bart-large-mnli
+    for: topic
+    type: ml
+    url: http://bart:8000
+
+  # Tier 2 — embedding similarity (cosine against slug label strings)
+  - name: BAAI/bge-small-en-v1.5
+    for: topic
+    type: ml
+    url: http://bge-small:8000
+
+  - name: BAAI/bge-large-en-v1.5
+    for: topic
+    type: ml
+    url: http://bge-large:8000
+
+  - name: sentence-transformers/all-MiniLM-L6-v2
+    for: topic
+    type: ml
+    url: http://minilm:8000
+
+  - name: sentence-transformers/all-mpnet-base-v2
+    for: topic
+    type: ml
+    url: http://mpnet:8000
+
+  - name: intfloat/e5-small-v2
+    for: topic
+    type: ml
+    url: http://e5-small:8000
+
+  - name: intfloat/e5-large-v2
+    for: topic
+    type: ml
+    url: http://e5-large:8000
+
+  # ── LLM (shared — used for both sentiment and topic) ──────────────────────
   - name: vllm
+    for: llm
     type: llm
     url: ${VLLM_URL:-http://localhost:8900}
     model_id: mlx-community/Qwen2.5-7B-Instruct-4bit
+

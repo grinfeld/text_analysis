@@ -1,5 +1,12 @@
 fastapi>=0.115.0
 uvicorn[standard]>=0.30.0
 pydantic>=2.0.0
+# HuggingFace tasks (text-classification, zero-shot-classification)
 transformers>=4.40.0
 torch --index-url https://download.pytorch.org/whl/cpu
+# Embedding similarity
+sentence-transformers>=3.0.0
+numpy>=1.26.0
+# Lexicon tasks
+nltk>=3.8.0
+nrclex==2.0.2

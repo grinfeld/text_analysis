@@ -4,9 +4,13 @@ import httpx
 import pytest
 import respx
 
-from sentiment.clients.base import SentimentClientError
+from sentiment.clients.base import ModelClientError
 from sentiment.clients.model_server import SIEBERT_LABELS, ModelServerClient
-from sentiment.clients.vllm import VllmClient
+from sentiment.clients.vllm import (
+    VllmClient,
+    TOPIC_SYSTEM_PROMPT,
+    TOPIC_USER_PROMPT_TEMPLATE,
+)
 
 
 @pytest.fixture
@@ -39,6 +43,20 @@ def vllm_client(vllm_http):
     )
 
 
+@pytest.fixture
+def vllm_topic_client(vllm_http):
+    return VllmClient(
+        model_name="vllm-topic",
+        base_url="http://localhost:8900",
+        model_id="mlx-community/Qwen2.5-7B-Instruct-4bit",
+        http_client=vllm_http,
+        task="topic",
+        system_prompt=TOPIC_SYSTEM_PROMPT,
+        user_prompt_template=TOPIC_USER_PROMPT_TEMPLATE,
+        valid_labels=frozenset(),  # open-ended — accept any slug
+    )
+
+
 class TestModelServerClient:
     @respx.mock
     async def test_predict_positive(self, siebert_client):
@@ -62,7 +80,7 @@ class TestModelServerClient:
         respx.post("http://siebert:8000/predict").mock(
             return_value=httpx.Response(503, text="service unavailable")
         )
-        with pytest.raises(SentimentClientError):
+        with pytest.raises(ModelClientError):
             await siebert_client.predict("hello")
 
     @respx.mock
@@ -70,13 +88,13 @@ class TestModelServerClient:
         respx.post("http://siebert:8000/predict").mock(
             return_value=httpx.Response(200, json={"unexpected": "shape"})
         )
-        with pytest.raises(SentimentClientError):
+        with pytest.raises(ModelClientError):
             await siebert_client.predict("hello")
 
     @respx.mock
     async def test_timeout_raises_client_error(self, siebert_client):
         respx.post("http://siebert:8000/predict").mock(side_effect=httpx.TimeoutException("timeout"))
-        with pytest.raises(SentimentClientError):
+        with pytest.raises(ModelClientError):
             await siebert_client.predict("hello")
 
     @respx.mock
@@ -86,6 +104,22 @@ class TestModelServerClient:
         )
         result = await siebert_client.predict("hmm")
         assert result.label == "neutral"
+
+    @respx.mock
+    async def test_empty_label_map_passes_label_through(self, hf_http):
+        # Zero-shot models have no label_map — raw label is returned as-is
+        client = ModelServerClient(
+            model_name="deberta",
+            base_url="http://deberta:8000",
+            http_client=hf_http,
+            label_map={},
+            task="topic",
+        )
+        respx.post("http://deberta:8000/predict").mock(
+            return_value=httpx.Response(200, json={"label": "financial_crime", "score": 0.91})
+        )
+        result = await client.predict("Shell company transferred funds offshore.")
+        assert result.label == "financial_crime"
 
 
 class TestVllmClient:
@@ -127,7 +161,7 @@ class TestVllmClient:
         respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=httpx.Response(200, json=body)
         )
-        with pytest.raises(SentimentClientError):
+        with pytest.raises(ModelClientError):
             await vllm_client.predict("hello")
 
     @respx.mock
@@ -135,7 +169,7 @@ class TestVllmClient:
         respx.post("http://localhost:8900/v1/chat/completions").mock(
             return_value=httpx.Response(500, text="internal error")
         )
-        with pytest.raises(SentimentClientError):
+        with pytest.raises(ModelClientError):
             await vllm_client.predict("hello")
 
     @respx.mock
@@ -145,3 +179,20 @@ class TestVllmClient:
         )
         result = await vllm_client.predict("amazing!")
         assert result.score == pytest.approx(1.0)
+
+    @respx.mock
+    async def test_topic_valid_slug_passes_through(self, vllm_topic_client):
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=self._make_vllm_response("financial_crime", 0.88)
+        )
+        result = await vllm_topic_client.predict("Shell company transferred funds offshore.")
+        assert result.label == "financial_crime"
+
+    @respx.mock
+    async def test_topic_novel_slug_passes_through(self, vllm_topic_client):
+        # Open-ended topic mode accepts any slug the model proposes
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=self._make_vllm_response("border_security", 0.82)
+        )
+        result = await vllm_topic_client.predict("Customs officials intercepted a vehicle at the border.")
+        assert result.label == "border_security"

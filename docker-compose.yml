@@ -1,10 +1,12 @@
 services:
 
-  # ── HuggingFace model servers ─────────────────────────────────────────────
+  # ── Sentiment models ───────────────────────────────────────────────────────
 
   siebert:
+    profiles: [sentiment]
     build:
       context: ./model_server
+    image: sentiment/model-server:latest
     environment:
       MODEL_NAME: siebert/sentiment-roberta-large-english
       HF_HOME: /hf_cache
@@ -18,8 +20,8 @@ services:
       start_period: 120s
 
   cardiffnlp:
-    build:
-      context: ./model_server
+    profiles: [sentiment]
+    image: sentiment/model-server:latest
     environment:
       MODEL_NAME: cardiffnlp/twitter-roberta-base-sentiment-latest
       HF_HOME: /hf_cache
@@ -33,8 +35,8 @@ services:
       start_period: 120s
 
   distilbert:
-    build:
-      context: ./model_server
+    profiles: [sentiment]
+    image: sentiment/model-server:latest
     environment:
       MODEL_NAME: lxyuan/distilbert-base-multilingual-cased-sentiments-student
       HF_HOME: /hf_cache
@@ -48,8 +50,10 @@ services:
       start_period: 120s
 
   nrc:
-    build:
-      context: ./nrc_server
+    profiles: [sentiment]
+    image: sentiment/model-server:latest
+    environment:
+      TASK: nrc
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -58,8 +62,10 @@ services:
       start_period: 30s
 
   vader:
-    build:
-      context: ./vader_server
+    profiles: [sentiment]
+    image: sentiment/model-server:latest
+    environment:
+      TASK: vader
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -68,8 +74,8 @@ services:
       start_period: 30s
 
   finbert:
-    build:
-      context: ./model_server
+    profiles: [sentiment]
+    image: sentiment/model-server:latest
     environment:
       MODEL_NAME: ProsusAI/finbert
       HF_HOME: /hf_cache
@@ -83,8 +89,8 @@ services:
       start_period: 120s
 
   nlptown:
-    build:
-      context: ./model_server
+    profiles: [sentiment]
+    image: sentiment/model-server:latest
     environment:
       MODEL_NAME: nlptown/bert-base-multilingual-uncased-sentiment
       HF_HOME: /hf_cache
@@ -95,6 +101,182 @@ services:
       interval: 15s
       timeout: 10s
       retries: 10
+      start_period: 120s
+
+  # ── Topic models — zero-shot NLI ───────────────────────────────────────────
+
+  deberta:
+    profiles: [topic]
+    build:
+      context: ./model_server
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: MoritzLaurer/deberta-v3-base-zeroshot-v1
+      TASK: zero-shot-classification
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
+  deberta-large:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: MoritzLaurer/deberta-v3-large-zeroshot-v2
+      TASK: zero-shot-classification
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+
+  nli-deberta:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: cross-encoder/nli-deberta-v3-large
+      TASK: zero-shot-classification
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+
+  bart:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: facebook/bart-large-mnli
+      TASK: zero-shot-classification
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 240s
+
+  # ── Topic models — embedding similarity ───────────────────────────────────
+
+  bge-small:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: BAAI/bge-small-en-v1.5
+      TASK: embedding
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  bge-large:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: BAAI/bge-large-en-v1.5
+      TASK: embedding
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  minilm:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: sentence-transformers/all-MiniLM-L6-v2
+      TASK: embedding
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  mpnet:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: sentence-transformers/all-mpnet-base-v2
+      TASK: embedding
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+  e5-small:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: intfloat/e5-small-v2
+      TASK: embedding
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  e5-large:
+    profiles: [topic]
+    image: sentiment/model-server:latest
+    environment:
+      MODEL_NAME: intfloat/e5-large-v2
+      TASK: embedding
+      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
+      HF_HOME: /hf_cache
+    volumes:
+      - hf_cache:/hf_cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
       start_period: 120s
 
   # ── vLLM (linux profile only) ─────────────────────────────────────────────

@@ -1,7 +1,7 @@
 import httpx
 import structlog
 
-from sentiment.clients.base import SentimentClient, SentimentClientError, SentimentResult
+from sentiment.clients.base import ModelClient, ModelClientError, PredictionResult
 
 logger = structlog.get_logger(__name__)
 
@@ -24,7 +24,7 @@ DISTILBERT_LABELS: dict[str, str] = {
 }
 
 
-class ModelServerClient(SentimentClient):
+class ModelServerClient(ModelClient):
     """Client for the internal model-server containers (HuggingFace pipeline wrapper)."""
 
     def __init__(
@@ -33,43 +33,48 @@ class ModelServerClient(SentimentClient):
         base_url: str,
         http_client: httpx.AsyncClient,
         label_map: dict[str, str],
+        task: str = "sentiment",
     ) -> None:
         self.model_name = model_name
+        self.task = task
         self._base_url = base_url.rstrip("/")
         self._http = http_client
         self._label_map = label_map
 
     def _normalise_label(self, raw_label: str) -> str:
+        if not self._label_map:
+            # No mapping configured — return label as-is (e.g. topic slugs)
+            return raw_label
         normalised = self._label_map.get(raw_label) or self._label_map.get(raw_label.lower())
         if normalised is None:
             logger.warning("unknown_label", model=self.model_name, raw_label=raw_label)
             return "neutral"
         return normalised
 
-    async def _predict(self, text: str) -> SentimentResult:
+    async def _predict(self, text: str) -> PredictionResult:
         url = f"{self._base_url}/predict"
         try:
             response = await self._http.post(url, json={"text": text}, timeout=30.0)
             response.raise_for_status()
         except httpx.TimeoutException as exc:
-            raise SentimentClientError(f"Timeout calling {url}") from exc
+            raise ModelClientError(f"Timeout calling {url}") from exc
         except httpx.HTTPStatusError as exc:
-            raise SentimentClientError(
+            raise ModelClientError(
                 f"HTTP {exc.response.status_code} from {url}"
             ) from exc
         except httpx.RequestError as exc:
-            raise SentimentClientError(f"Request error calling {url}: {exc}") from exc
+            raise ModelClientError(f"Request error calling {url}: {exc}") from exc
 
         try:
             data: dict = response.json()
             raw_label: str = data["label"]
             score: float = float(data["score"])
         except (KeyError, ValueError, TypeError) as exc:
-            raise SentimentClientError(
+            raise ModelClientError(
                 f"Unexpected response shape from {url}: {response.text!r}"
             ) from exc
 
-        return SentimentResult(
+        return PredictionResult(
             label=self._normalise_label(raw_label),
             score=score,
             raw=data,

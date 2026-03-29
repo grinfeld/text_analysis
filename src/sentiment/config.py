@@ -27,6 +27,7 @@ class ModelConfig:
     name: str
     type: str          # "ml" | "llm"
     url: str
+    for_: str | None = None
     model_id: str | None = None
     labels: dict[str, str] | None = None
 
@@ -54,6 +55,7 @@ def load_model_configs(path: str | None = None) -> list[ModelConfig]:
             name=entry["name"],
             type=entry["type"],
             url=_expand_env(entry["url"]),
+            for_=entry.get("for"),
             model_id=_expand_env(entry.get("model_id")),
             labels=entry.get("labels"),
         ))

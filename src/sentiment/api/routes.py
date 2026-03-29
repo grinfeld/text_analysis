@@ -1,11 +1,12 @@
 import time
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from sentiment.clients.base import SentimentClientError
-from sentiment.registry import get_all_clients
+from sentiment.clients.base import ModelClientError
+from sentiment.registry import get_clients_for
 
 logger = structlog.get_logger(__name__)
 
@@ -13,7 +14,10 @@ router = APIRouter()
 
 
 class AnalyseRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
     text: str
+    for_: Literal["sentiment", "topic"] = Field("sentiment", alias="for")
 
     @field_validator("text")
     @classmethod
@@ -38,7 +42,7 @@ class AnalyseResponse(BaseModel):
 @router.post("/analyse", response_model=AnalyseResponse)
 async def analyse(req: AnalyseRequest) -> AnalyseResponse:
     results = []
-    for client in get_all_clients():
+    for client in get_clients_for(req.for_):
         start = time.perf_counter()
         try:
             result = await client.predict(req.text)
@@ -49,7 +53,7 @@ async def analyse(req: AnalyseRequest) -> AnalyseResponse:
                 score=result.score,
                 latency_s=round(latency_s, 4),
             ))
-        except SentimentClientError as exc:
+        except ModelClientError as exc:
             latency_s = time.perf_counter() - start
             logger.error("model_failed", model=client.model_name, error=str(exc))
             results.append(ModelResult(

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Sentiment Analysis</title>
+  <title>Text Analysis</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -41,7 +41,7 @@
       margin-bottom: 0.4rem;
     }
 
-    textarea {
+    textarea, select {
       width: 100%;
       padding: 0.6rem 0.8rem;
       border: 1px solid #d1d5db;
@@ -52,12 +52,15 @@
       margin-bottom: 1rem;
       outline: none;
       transition: border-color 0.15s;
-      resize: vertical;
-      min-height: 120px;
       font-family: inherit;
     }
 
-    textarea:focus { border-color: #6366f1; }
+    textarea {
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    textarea:focus, select:focus { border-color: #6366f1; }
 
     button {
       width: 100%;
@@ -124,6 +127,8 @@
     .label-badge.negative { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
     .label-badge.neutral  { background: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
     .label-badge.error    { background: #fff7ed; color: #ea580c; border: 1px solid #fdba74; }
+    /* topic slugs and any other labels */
+    .label-badge.topic-label { background: #eff6ff; color: #1d4ed8; border: 1px solid #93c5fd; }
 
     .score { color: #374151; }
     .latency { color: #9ca3af; font-size: 0.82rem; }
@@ -145,10 +150,16 @@
 </head>
 <body>
   <div class="card">
-    <h1>Sentiment Analysis</h1>
+    <h1>Text Analysis</h1>
 
     <label for="text-input">Text</label>
     <textarea id="text-input" placeholder="Enter text to analyse…"></textarea>
+
+    <label for="task-select">Task</label>
+    <select id="task-select">
+      <option value="sentiment">Sentiment</option>
+      <option value="topic">Topic</option>
+    </select>
 
     <button id="submit-btn" onclick="analyse()">Analyse</button>
 
@@ -168,8 +179,11 @@
   </div>
 
   <script>
+    const SENTIMENT_LABELS = new Set(["positive", "negative", "neutral"]);
+
     async function analyse() {
       const text = document.getElementById("text-input").value.trim();
+      const task = document.getElementById("task-select").value;
       const btn = document.getElementById("submit-btn");
       const resultsDiv = document.getElementById("results");
       const tbody = document.getElementById("results-body");
@@ -189,7 +203,7 @@
         const resp = await fetch("/analyse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, for: task }),
         });
 
         if (!resp.ok) {
@@ -221,9 +235,11 @@
       }
       const pct = (r.score * 100).toFixed(1) + "%";
       const ms = (r.latency_s * 1000).toFixed(0) + " ms";
+      const badgeClass = SENTIMENT_LABELS.has(r.label) ? r.label : "topic-label";
+      const displayLabel = r.label.replace(/_/g, " ");
       return `<tr>
         <td><span class="model-name">${r.model}</span></td>
-        <td><span class="label-badge ${r.label}">${r.label}</span></td>
+        <td><span class="label-badge ${badgeClass}">${displayLabel}</span></td>
         <td class="score">${pct}</td>
         <td class="latency">${ms}</td>
       </tr>`;
