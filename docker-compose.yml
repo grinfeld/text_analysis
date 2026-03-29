@@ -15,6 +15,7 @@ x-model-hf: &model-hf
 
 x-model-zeroshot: &model-zeroshot
   <<: *model-hf
+  image: text-analysis/model-server:latest
   environment:
     HF_HOME: /hf_cache
     TASK: zero-shot-classification
@@ -28,6 +29,7 @@ x-model-zeroshot: &model-zeroshot
 
 x-model-embedding: &model-embedding
   <<: *model-hf
+  image: text-analysis/model-server:latest
   environment:
     HF_HOME: /hf_cache
     TASK: embedding
@@ -55,9 +57,6 @@ services:
   siebert:
     <<: *model-hf
     profiles: [sentiment]
-    build:
-      context: ./model_server
-    image: text-analysis/model-server:latest
     environment:
       MODEL_NAME: siebert/sentiment-roberta-large-english
       HF_HOME: /hf_cache
@@ -107,9 +106,6 @@ services:
   deberta:
     <<: *model-zeroshot
     profiles: [topic]
-    build:
-      context: ./model_server
-    image: text-analysis/model-server:latest
     environment:
       MODEL_NAME: MoritzLaurer/deberta-v3-base-zeroshot-v1
       TASK: zero-shot-classification
@@ -257,7 +253,7 @@ services:
 
   # ── FastAPI backend ───────────────────────────────────────────────────────
 
-  backend:
+  text-analysis-backend:
     build:
       context: .
       dockerfile: Dockerfile
@@ -271,13 +267,13 @@ services:
       - ./config.yaml:/app/config.yaml:ro
   # ── Frontend (nginx) ──────────────────────────────────────────────────────
 
-  frontend:
+  text-analysis-frontend:
     build:
       context: ./frontend
     ports:
       - "80:80"
     depends_on:
-      - backend
+      - text-analysis-backend
 
   # ── Observability ─────────────────────────────────────────────────────────
 
@@ -288,7 +284,7 @@ services:
     volumes:
       - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
-      - backend
+      - text-analysis-backend
 
   grafana:
     image: grafana/grafana:11.6.0
