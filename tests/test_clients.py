@@ -5,7 +5,9 @@ import pytest
 import respx
 
 from sentiment.clients.base import ModelClientError
-from sentiment.clients.model_server import SIEBERT_LABELS, ModelServerClient
+from sentiment.clients.model_server import ModelServerClient
+
+_SIEBERT_LABELS: dict[str, str] = {"POSITIVE": "positive", "NEGATIVE": "negative"}
 from sentiment.clients.vllm import (
     VllmClient,
     TOPIC_SYSTEM_PROMPT,
@@ -24,7 +26,7 @@ def siebert_client(hf_http):
         model_name="siebert/sentiment-roberta-large-english",
         base_url="http://siebert:8000",
         http_client=hf_http,
-        label_map=SIEBERT_LABELS,
+        label_map=_SIEBERT_LABELS,
     )
 
 
@@ -196,3 +198,12 @@ class TestVllmClient:
         )
         result = await vllm_topic_client.predict("Customs officials intercepted a vehicle at the border.")
         assert result.label == "border_security"
+
+    @respx.mock
+    async def test_topic_empty_label_passes_through(self, vllm_topic_client):
+        # When no topic applies the model returns empty string — pass through as-is
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=self._make_vllm_response("", 0.0)
+        )
+        result = await vllm_topic_client.predict("Hello world.")
+        assert result.label == ""

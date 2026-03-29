@@ -5,25 +5,6 @@ from sentiment.clients.base import ModelClient, ModelClientError, PredictionResu
 
 logger = structlog.get_logger(__name__)
 
-# Label maps: raw model output label → normalised label
-SIEBERT_LABELS: dict[str, str] = {
-    "POSITIVE": "positive",
-    "NEGATIVE": "negative",
-}
-
-CARDIFFNLP_LABELS: dict[str, str] = {
-    "positive": "positive",
-    "neutral": "neutral",
-    "negative": "negative",
-}
-
-DISTILBERT_LABELS: dict[str, str] = {
-    "positive": "positive",
-    "neutral": "neutral",
-    "negative": "negative",
-}
-
-
 class ModelServerClient(ModelClient):
     """Client for the internal model-server containers (HuggingFace pipeline wrapper)."""
 

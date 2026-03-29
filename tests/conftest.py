@@ -2,9 +2,7 @@ import importlib
 import os
 from pathlib import Path
 
-import httpx
 import pytest
-import respx
 from fastapi.testclient import TestClient
 
 from sentiment.observability import metrics
@@ -39,10 +37,3 @@ def client():
     registry_module.init()
     with TestClient(app) as c:
         yield c
-
-
-@pytest.fixture
-def mock_http():
-    """Active respx mock router for all HTTPX calls."""
-    with respx.mock(assert_all_called=False) as router:
-        yield router

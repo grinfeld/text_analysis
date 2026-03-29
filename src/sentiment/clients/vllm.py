@@ -39,8 +39,10 @@ signals_intelligence, covert_operation, money_laundering, sanctions_evasion,
 recruitment, daily_reporting, network_configuration, routing, administrative,
 organizational_structure, spatial_context, temporal_reference
 
+If the text has no clear topic, set "label" to an empty string.
+
 Respond with a JSON object containing exactly two fields:
-- "label": a snake_case topic slug
+- "label": a snake_case topic slug, or an empty string if no topic applies
 - "score": a float between 0.0 and 1.0 representing your confidence
 
 Do not include any explanation or extra text — only the JSON object.
@@ -48,17 +50,6 @@ Do not include any explanation or extra text — only the JSON object.
 Example output: {{"label": "financial_crime", "score": 0.88}}
 
 Text: {text}"""
-
-TOPIC_VALID_LABELS: frozenset[str] = frozenset({
-    "arms_trafficking", "financial_crime", "surveillance_operation",
-    "human_intelligence", "signals_intelligence", "covert_operation",
-    "money_laundering", "sanctions_evasion", "recruitment", "daily_reporting",
-    "network_configuration", "routing", "administrative",
-    "organizational_structure", "spatial_context", "temporal_reference",
-})
-
-_TOPIC_FALLBACK_LABEL = "administrative"
-
 
 class VllmClient(ModelClient):
     """Client for a vLLM server using the OpenAI-compatible chat completions API."""
@@ -123,6 +114,7 @@ class VllmClient(ModelClient):
         if self._valid_labels and label not in self._valid_labels:
             logger.warning("vllm_unknown_label", raw_label=raw_label, task=self.task, fallback="neutral")
             label = "neutral"
+        # open-ended mode (empty valid_labels): pass label through as-is, including empty string
 
         score = max(0.0, min(1.0, score))
 
