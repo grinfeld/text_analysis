@@ -67,28 +67,7 @@ models:
 
   # ── Topic models ──────────────────────────────────────────────────────────
 
-  # Tier 2 — zero-shot NLI classifiers
-  - name: MoritzLaurer/deberta-v3-base-zeroshot-v1
-    for: topic
-    type: ml
-    url: http://deberta:8000
-
-  - name: MoritzLaurer/deberta-v3-large-zeroshot-v1
-    for: topic
-    type: ml
-    url: http://deberta_large:8000
-
-  - name: cross-encoder/nli-deberta-v3-large
-    for: topic
-    type: ml
-    url: http://nli_deberta:8000
-
-  - name: facebook/bart-large-mnli
-    for: topic
-    type: ml
-    url: http://bart:8000
-
-  # Tier 2 — embedding similarity (cosine against slug label strings)
+  # Embedding similarity (cosine against slug label strings)
   - name: BAAI/bge-small-en-v1.5
     for: topic
     type: ml

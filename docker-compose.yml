@@ -13,19 +13,6 @@ x-model-hf: &model-hf
     retries: 10
     start_period: 120s
 
-x-model-zeroshot: &model-zeroshot
-  <<: *model-hf
-  image: text-analysis/model-server:latest
-  environment:
-    HF_HOME: /hf_cache
-    TASK: zero-shot-classification
-    CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
-  healthcheck:
-    test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-    interval: 15s
-    timeout: 10s
-    retries: 10
-    start_period: 240s
 
 x-model-embedding: &model-embedding
   <<: *model-hf
@@ -100,50 +87,6 @@ services:
     profiles: [sentiment]
     environment:
       TASK: vader
-
-  # ── Topic models — zero-shot NLI ───────────────────────────────────────────
-
-  deberta:
-    <<: *model-zeroshot
-    profiles: [topic]
-    environment:
-      MODEL_NAME: MoritzLaurer/deberta-v3-base-zeroshot-v1
-      TASK: zero-shot-classification
-      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
-      HF_HOME: /hf_cache
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 15s
-      timeout: 10s
-      retries: 10
-      start_period: 180s
-
-  deberta_large:
-    <<: *model-zeroshot
-    profiles: [topic]
-    environment:
-      MODEL_NAME: MoritzLaurer/deberta-v3-large-zeroshot-v1
-      TASK: zero-shot-classification
-      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
-      HF_HOME: /hf_cache
-
-  nli_deberta:
-    <<: *model-zeroshot
-    profiles: [topic]
-    environment:
-      MODEL_NAME: cross-encoder/nli-deberta-v3-large
-      TASK: zero-shot-classification
-      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
-      HF_HOME: /hf_cache
-
-  bart:
-    <<: *model-zeroshot
-    profiles: [topic]
-    environment:
-      MODEL_NAME: facebook/bart-large-mnli
-      TASK: zero-shot-classification
-      CANDIDATE_LABELS: "arms_trafficking,financial_crime,surveillance_operation,human_intelligence,signals_intelligence,covert_operation,money_laundering,sanctions_evasion,recruitment,daily_reporting,network_configuration,routing,administrative,organizational_structure,spatial_context,temporal_reference"
-      HF_HOME: /hf_cache
 
   # ── Topic models — embedding similarity ───────────────────────────────────
 

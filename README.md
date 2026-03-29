@@ -183,17 +183,6 @@ models:
 | `nrc` | `nrc` | NRC Emotion Lexicon — positive/negative emotion aggregation |
 | `vader` | `vader` | VADER — rule-based lexicon, compound score → 3-class |
 
-### Topic — zero-shot NLI (`for: topic`, profile: `topic`)
-
-Classify directly against taxonomy slugs as candidate labels:
-
-| Name | Container | Notes |
-|------|-----------|-------|
-| `MoritzLaurer/deberta-v3-base-zeroshot-v1` | `deberta` | DeBERTa, 86M, recommended small zero-shot |
-| `MoritzLaurer/deberta-v3-large-zeroshot-v1` | `deberta_large` | DeBERTa, 400M, higher accuracy |
-| `cross-encoder/nli-deberta-v3-large` | `nli_deberta` | NLI cross-encoder, 400M |
-| `facebook/bart-large-mnli` | `bart` | BART, 400M, widely-used zero-shot baseline |
-
 ### Topic — embedding similarity (`for: topic`, profile: `topic`)
 
 Embed text and find nearest topic slugs by cosine similarity (top 3 returned):
