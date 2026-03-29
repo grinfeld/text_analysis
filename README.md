@@ -16,9 +16,23 @@ Three Docker Compose profiles control which model containers start:
 | `topic` | All topic model containers |
 | `linux` | vLLM container (Linux/CPU only) |
 
-Backend, frontend, Prometheus, and Grafana always start regardless of profile.
+`text-analysis-backend`, `text-analysis-frontend`, Prometheus, and Grafana always start regardless of profile.
 
-### macOS / Apple Silicon
+### Using the scripts
+
+```bash
+./start.sh   # interactive: asks OS and model profiles, builds model-server image, starts detached
+./down.sh    # stops all containers (all profiles)
+./down.sh --volumes   # also removes the hf_cache volume
+```
+
+`start.sh` builds `text-analysis/model-server:latest` before starting and sets `LLM_URL` automatically on macOS.
+
+---
+
+### Manual start
+
+#### macOS / Apple Silicon
 
 The LLM runs natively via mlx-lm on the host (uses the Metal GPU). Start it first:
 
@@ -27,34 +41,48 @@ uv tool install mlx-lm
 mlx_lm.server --model mlx-community/Qwen2.5-7B-Instruct-4bit --port 8900
 ```
 
-Then start the stack:
+Build the model-server image once, then start the stack:
 
 ```bash
+docker build -t text-analysis/model-server:latest ./model_server
+
 export LLM_URL=http://host.docker.internal:8900
 
-# Sentiment models only
-docker compose --profile sentiment up --build
+# Sentiment only
+docker compose --profile sentiment up -d
 
-# Topic models only
-docker compose --profile topic up --build
+# Topic only
+docker compose --profile topic up -d
 
 # Both
-docker compose --profile sentiment --profile topic up --build
+docker compose --profile sentiment --profile topic up -d
 ```
 
-### Linux
+#### Linux
 
-The LLM runs inside a Docker container via vLLM (CPU mode). Add the `linux` profile:
+The LLM runs inside a Docker container via vLLM (CPU mode):
 
 ```bash
+docker build -t text-analysis/model-server:latest ./model_server
+
 # Sentiment + LLM
-docker compose --profile sentiment --profile linux up --build
+docker compose --profile sentiment --profile linux up -d
 
 # All
-docker compose --profile sentiment --profile topic --profile linux up --build
+docker compose --profile sentiment --profile topic --profile linux up -d
 ```
 
 `LLM_URL` defaults to `http://vllm:8900` when not set, so no export needed.
+
+### Manual stop
+
+```bash
+# Stop all profiles
+docker compose --profile sentiment --profile topic --profile linux down
+
+# Stop and remove the model weights cache volume
+docker compose --profile sentiment --profile topic --profile linux down --volumes
+```
 
 ---
 
