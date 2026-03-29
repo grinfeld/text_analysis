@@ -54,4 +54,4 @@ echo "Starting: profiles=[${PROFILES}]"
 echo ""
 
 # shellcheck disable=SC2086
-docker compose $PROFILE_FLAGS up
+docker compose $PROFILE_FLAGS up -d
