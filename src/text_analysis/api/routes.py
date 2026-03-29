@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Literal
 
@@ -6,6 +7,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from text_analysis.clients.base import ModelClientError
+from text_analysis.config import settings
 from text_analysis.registry import get_clients_for
 
 logger = structlog.get_logger(__name__)
@@ -43,27 +45,33 @@ class AnalyseResponse(BaseModel):
     results: list[ModelResult]
 
 
-@router.post("/analyse", response_model=AnalyseResponse)
-async def analyse(req: AnalyseRequest) -> AnalyseResponse:
-    results = []
-    for client in get_clients_for(req.for_):
+async def _call_client(client, text: str, sem: asyncio.Semaphore) -> ModelResult:
+    async with sem:
         start = time.perf_counter()
         try:
-            result = await client.predict(req.text)
+            result = await client.predict(text)
             latency_s = time.perf_counter() - start
-            results.append(ModelResult(
+            return ModelResult(
                 model=client.model_name,
                 labels=[LabelScore(label=l, score=round(s, 2)) for l, s in result.labels],
                 latency_s=round(latency_s, 4),
-            ))
+            )
         except ModelClientError as exc:
             latency_s = time.perf_counter() - start
             logger.error("model_failed", model=client.model_name, error=str(exc))
-            results.append(ModelResult(
+            return ModelResult(
                 model=client.model_name,
                 labels=[],
                 latency_s=round(latency_s, 4),
                 error=str(exc),
-            ))
+            )
 
-    return AnalyseResponse(results=results)
+
+@router.post("/analyse", response_model=AnalyseResponse)
+async def analyse(req: AnalyseRequest) -> AnalyseResponse:
+    clients = get_clients_for(req.for_)
+    sem = asyncio.Semaphore(settings.max_concurrent_per_request)
+    results = await asyncio.gather(
+        *[_call_client(client, req.text, sem) for client in clients]
+    )
+    return AnalyseResponse(results=list(results))

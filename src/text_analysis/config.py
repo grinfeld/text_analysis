@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     log_format: str = "json"  # "json" | "console"
 
+    # Concurrency — max model calls to run in parallel within a single request
+    max_concurrent_per_request: int = 4
+
 
 settings = Settings()
 

@@ -259,6 +259,7 @@ The Docker image is built once and reused by all model containers via `image: te
 | `CONFIG_PATH` | shell / env | Path to `config.yaml`. Defaults to `config.yaml`. Useful in tests. |
 | `LOG_LEVEL` | `docker-compose.yml` | Python log level. Default: `INFO`. |
 | `LOG_FORMAT` | `docker-compose.yml` | `json` or `console`. Default: `json`. |
+| `MAX_CONCURRENT_PER_REQUEST` | `docker-compose.yml` | Max model calls run in parallel within a single request. Default: `4`. |
 
 ---
 

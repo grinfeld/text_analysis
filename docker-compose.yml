@@ -263,6 +263,7 @@ services:
       LOG_LEVEL: INFO
       LOG_FORMAT: json
       VLLM_URL: ${LLM_URL:-http://vllm:8900}
+      MAX_CONCURRENT_PER_REQUEST: 4
     volumes:
       - ./config.yaml:/app/config.yaml:ro
   # ── Frontend (nginx) ──────────────────────────────────────────────────────

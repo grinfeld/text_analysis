@@ -1,3 +1,4 @@
+import asyncio
 import json
 
 import httpx
@@ -213,3 +214,112 @@ class TestAnalyseTopicEndpoint:
         # This would fail at the model HTTP calls, so we keep it integration-style
         # by checking the request is accepted and routes to sentiment.
         pass
+
+
+class TestConcurrency:
+    @respx.mock
+    async def test_calls_are_interleaved(self, client, monkeypatch):
+        """Verify that model calls overlap (concurrent) not sequential."""
+        import text_analysis.config as cfg_module
+        monkeypatch.setattr(cfg_module.settings, "max_concurrent_per_request", 8)
+
+        events: list[str] = []
+
+        _URLS = [
+            "http://siebert:8000/predict",
+            "http://cardiffnlp:8000/predict",
+            "http://distilbert:8000/predict",
+            "http://nrc:8000/predict",
+            "http://vader:8000/predict",
+            "http://finbert:8000/predict",
+            "http://nlptown:8000/predict",
+        ]
+
+        for url in _URLS:
+            name = url.split("//")[1].split(":")[0]
+
+            async def handler(request, _name=name):
+                events.append(f"{_name}:start")
+                await asyncio.sleep(0.01)
+                events.append(f"{_name}:end")
+                return httpx.Response(200, json={"labels": [{"label": "positive", "score": 0.9}]})
+
+            respx.post(url).mock(side_effect=handler)
+
+        vllm_content = json.dumps({"label": "positive", "score": 0.88})
+
+        async def vllm_handler(request):
+            events.append("vllm:start")
+            await asyncio.sleep(0.01)
+            events.append("vllm:end")
+            return httpx.Response(200, json={"choices": [{"message": {"content": vllm_content}}]})
+
+        respx.post("http://localhost:8900/v1/chat/completions").mock(side_effect=vllm_handler)
+
+        resp = client.post("/analyse", json={"text": "I love it!"})
+        assert resp.status_code == 200
+
+        starts = [e for e in events if e.endswith(":start")]
+        ends = [e for e in events if e.endswith(":end")]
+        # All 8 starts should appear before all 8 ends — proving calls overlapped
+        assert len(starts) == 8
+        assert len(ends) == 8
+        last_start_idx = max(events.index(s) for s in starts)
+        first_end_idx = min(events.index(e) for e in ends)
+        assert last_start_idx > first_end_idx, (
+            "Expected interleaved execution but events were sequential: "
+            + str(events)
+        )
+
+    @respx.mock
+    async def test_results_order_preserved_with_variable_latency(self, client, monkeypatch):
+        """Results stay in config order even when faster models finish first."""
+        import text_analysis.config as cfg_module
+        monkeypatch.setattr(cfg_module.settings, "max_concurrent_per_request", 8)
+
+        _URLS_DELAYS = [
+            ("http://siebert:8000/predict", 0.07),
+            ("http://cardiffnlp:8000/predict", 0.06),
+            ("http://distilbert:8000/predict", 0.05),
+            ("http://nrc:8000/predict", 0.04),
+            ("http://vader:8000/predict", 0.03),
+            ("http://finbert:8000/predict", 0.02),
+            ("http://nlptown:8000/predict", 0.01),
+        ]
+        for url, delay in _URLS_DELAYS:
+            async def handler(request, _d=delay):
+                await asyncio.sleep(_d)
+                return httpx.Response(200, json={"labels": [{"label": "positive", "score": 0.9}]})
+            respx.post(url).mock(side_effect=handler)
+
+        async def fast_vllm(request):
+            await asyncio.sleep(0.005)
+            content = json.dumps({"label": "positive", "score": 0.88})
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        respx.post("http://localhost:8900/v1/chat/completions").mock(side_effect=fast_vllm)
+
+        resp = client.post("/analyse", json={"text": "Nice."})
+        assert resp.status_code == 200
+        models = [r["model"] for r in resp.json()["results"]]
+        assert models == [
+            "siebert/sentiment-roberta-large-english",
+            "cardiffnlp/twitter-roberta-base-sentiment-latest",
+            "lxyuan/distilbert-base-multilingual-cased-sentiments-student",
+            "nrc",
+            "vader",
+            "ProsusAI/finbert",
+            "nlptown/bert-base-multilingual-uncased-sentiment",
+            "vllm",
+        ]
+
+    @respx.mock
+    def test_semaphore_one_still_returns_all_results(self, client, monkeypatch):
+        """With max_concurrent_per_request=1 all models still complete."""
+        import text_analysis.config as cfg_module
+        monkeypatch.setattr(cfg_module.settings, "max_concurrent_per_request", 1)
+
+        _mock_sentiment_models()
+        resp = client.post("/analyse", json={"text": "Test."})
+        assert resp.status_code == 200
+        assert len(resp.json()["results"]) == 8
