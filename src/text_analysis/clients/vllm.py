@@ -3,7 +3,7 @@ import json
 import httpx
 import structlog
 
-from sentiment.clients.base import ModelClient, ModelClientError, PredictionResult
+from text_analysis.clients.base import ModelClient, ModelClientError, PredictionResult
 
 logger = structlog.get_logger(__name__)
 

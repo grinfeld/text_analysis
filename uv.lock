@@ -580,7 +580,45 @@ wheels = [
 ]
 
 [[package]]
-name = "sentiment"
+name = "starlette"
+version = "1.0.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anyio" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/81/69/17425771797c36cded50b7fe44e850315d039f28b15901ab44839e70b593/starlette-1.0.0.tar.gz", hash = "sha256:6a4beaf1f81bb472fd19ea9b918b50dc3a77a6f2e190a12954b25e6ed5eea149", size = 2655289, upload-time = "2026-03-22T18:29:46.779Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0b/c9/584bc9651441b4ba60cc4d557d8a547b5aff901af35bda3a4ee30c819b82/starlette-1.0.0-py3-none-any.whl", hash = "sha256:d3ec55e0bb321692d275455ddfd3df75fff145d009685eb40dc91fc66b03d38b", size = 72651, upload-time = "2026-03-22T18:29:45.111Z" },
+]
+
+[[package]]
+name = "structlog"
+version = "25.5.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510, upload-time = "2025-10-27T08:28:21.535Z" },
+]
+
+[[package]]
+name = "testcontainers"
+version = "4.14.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "docker" },
+    { name = "python-dotenv" },
+    { name = "typing-extensions" },
+    { name = "urllib3" },
+    { name = "wrapt" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/ac/a597c3a0e02b26cbed6dd07df68be1e57684766fd1c381dee9b170a99690/testcontainers-4.14.2.tar.gz", hash = "sha256:1340ccf16fe3acd9389a6c9e1d9ab21d9fe99a8afdf8165f89c3e69c1967d239", size = 166841, upload-time = "2026-03-18T05:19:16.696Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/13/2d/26b8b30067d94339afee62c3edc9b803a6eb9332f521ba77d8aaab5de873/testcontainers-4.14.2-py3-none-any.whl", hash = "sha256:0d0522c3cd8f8d9627cda41f7a6b51b639fa57bdc492923c045117933c668d68", size = 125712, upload-time = "2026-03-18T05:19:15.29Z" },
+]
+
+[[package]]
+name = "text-analysis"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
@@ -624,44 +662,6 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=1.3.0" },
     { name = "respx", specifier = ">=0.22.0" },
     { name = "testcontainers", specifier = ">=4.8.0" },
-]
-
-[[package]]
-name = "starlette"
-version = "1.0.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "anyio" },
-    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/81/69/17425771797c36cded50b7fe44e850315d039f28b15901ab44839e70b593/starlette-1.0.0.tar.gz", hash = "sha256:6a4beaf1f81bb472fd19ea9b918b50dc3a77a6f2e190a12954b25e6ed5eea149", size = 2655289, upload-time = "2026-03-22T18:29:46.779Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/0b/c9/584bc9651441b4ba60cc4d557d8a547b5aff901af35bda3a4ee30c819b82/starlette-1.0.0-py3-none-any.whl", hash = "sha256:d3ec55e0bb321692d275455ddfd3df75fff145d009685eb40dc91fc66b03d38b", size = 72651, upload-time = "2026-03-22T18:29:45.111Z" },
-]
-
-[[package]]
-name = "structlog"
-version = "25.5.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/ef/52/9ba0f43b686e7f3ddfeaa78ac3af750292662284b3661e91ad5494f21dbc/structlog-25.5.0.tar.gz", hash = "sha256:098522a3bebed9153d4570c6d0288abf80a031dfdb2048d59a49e9dc2190fc98", size = 1460830, upload-time = "2025-10-27T08:28:23.028Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/a8/45/a132b9074aa18e799b891b91ad72133c98d8042c70f6240e4c5f9dabee2f/structlog-25.5.0-py3-none-any.whl", hash = "sha256:a8453e9b9e636ec59bd9e79bbd4a72f025981b3ba0f5837aebf48f02f37a7f9f", size = 72510, upload-time = "2025-10-27T08:28:21.535Z" },
-]
-
-[[package]]
-name = "testcontainers"
-version = "4.14.2"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "docker" },
-    { name = "python-dotenv" },
-    { name = "typing-extensions" },
-    { name = "urllib3" },
-    { name = "wrapt" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/ca/ac/a597c3a0e02b26cbed6dd07df68be1e57684766fd1c381dee9b170a99690/testcontainers-4.14.2.tar.gz", hash = "sha256:1340ccf16fe3acd9389a6c9e1d9ab21d9fe99a8afdf8165f89c3e69c1967d239", size = 166841, upload-time = "2026-03-18T05:19:16.696Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/13/2d/26b8b30067d94339afee62c3edc9b803a6eb9332f521ba77d8aaab5de873/testcontainers-4.14.2-py3-none-any.whl", hash = "sha256:0d0522c3cd8f8d9627cda41f7a6b51b639fa57bdc492923c045117933c668d68", size = 125712, upload-time = "2026-03-18T05:19:15.29Z" },
 ]
 
 [[package]]

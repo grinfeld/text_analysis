@@ -1,5 +1,5 @@
 [project]
-name = "sentiment"
+name = "text-analysis"
 version = "0.1.0"
 description = "Sentiment analysis learning project — FastAPI + HuggingFace models + vLLM + OTEL + Grafana"
 readme = "README.md"

@@ -24,8 +24,8 @@ from fastapi.testclient import TestClient
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.waiting_utils import wait_for_logs
 
-from sentiment.clients.base import ModelClientError
-from sentiment.clients.model_server import ModelServerClient
+from text_analysis.clients.base import ModelClientError
+from text_analysis.clients.model_server import ModelServerClient
 
 # ---------------------------------------------------------------------------
 # Tiny model used in all integration tests.
@@ -73,7 +73,7 @@ def model_server_container():
     Stopped automatically at end of session.
     """
     container = (
-        DockerContainer(image="sentiment-model-server-test")
+        DockerContainer(image="text-analysis-model-server-test")
         .with_env("MODEL_NAME", TINY_MODEL)
         .with_env("HF_HOME", "/tmp/hf_cache")
         .with_exposed_ports(8000)
@@ -82,7 +82,7 @@ def model_server_container():
     import docker as docker_sdk
 
     client = docker_sdk.from_env()
-    client.images.build(path=_MODEL_SERVER_CONTEXT, tag="sentiment-model-server-test", rm=True)
+    client.images.build(path=_MODEL_SERVER_CONTEXT, tag="text-analysis-model-server-test", rm=True)
 
     with container:
         wait_for_logs(container, "Application startup complete", timeout=120)
@@ -208,14 +208,14 @@ class TestBackendWithRealModelServer:
 
         import importlib
 
-        import sentiment.config as cfg_module
-        import sentiment.registry as reg_module
+        import text_analysis.config as cfg_module
+        import text_analysis.registry as reg_module
 
         importlib.reload(cfg_module)
         importlib.reload(reg_module)
 
-        from sentiment.main import app
-        from sentiment.observability import metrics
+        from text_analysis.main import app
+        from text_analysis.observability import metrics
 
         metrics.setup()
         reg_module.init()

@@ -4,11 +4,11 @@ import httpx
 import pytest
 import respx
 
-from sentiment.clients.base import ModelClientError
-from sentiment.clients.model_server import ModelServerClient
+from text_analysis.clients.base import ModelClientError
+from text_analysis.clients.model_server import ModelServerClient
 
 _SIEBERT_LABELS: dict[str, str] = {"POSITIVE": "positive", "NEGATIVE": "negative"}
-from sentiment.clients.vllm import (
+from text_analysis.clients.vllm import (
     VllmClient,
     TOPIC_SYSTEM_PROMPT,
     TOPIC_USER_PROMPT_TEMPLATE,

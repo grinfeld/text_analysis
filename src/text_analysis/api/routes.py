@@ -5,8 +5,8 @@ import structlog
 from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from sentiment.clients.base import ModelClientError
-from sentiment.registry import get_clients_for
+from text_analysis.clients.base import ModelClientError
+from text_analysis.registry import get_clients_for
 
 logger = structlog.get_logger(__name__)
 

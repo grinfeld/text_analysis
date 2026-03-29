@@ -5,7 +5,7 @@ from typing import Any
 
 import structlog
 
-from sentiment.observability import metrics
+from text_analysis.observability import metrics
 
 logger = structlog.get_logger(__name__)
 

@@ -4,11 +4,11 @@ import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from sentiment.api.routes import router
-from sentiment.config import settings
-from sentiment.observability import metrics
-from sentiment.observability.logging import configure_logging
-from sentiment import registry as registry_module
+from text_analysis.api.routes import router
+from text_analysis.config import settings
+from text_analysis.observability import metrics
+from text_analysis.observability.logging import configure_logging
+from text_analysis import registry as registry_module
 
 configure_logging(settings.log_level, settings.log_format)
 logger = structlog.get_logger(__name__)

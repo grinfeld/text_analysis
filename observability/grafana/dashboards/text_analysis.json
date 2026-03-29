@@ -31,7 +31,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "rate(sentiment_model_requests_total[1m])",
+          "expr": "rate(text_analysis_model_requests_total[1m])",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -54,7 +54,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "rate(sentiment_model_errors_total[1m])",
+          "expr": "rate(text_analysis_model_errors_total[1m])",
           "legendFormat": "{{model}} / {{error_type}}",
           "refId": "A"
         }
@@ -84,7 +84,7 @@
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "orientation": "auto", "textMode": "auto", "colorMode": "background" },
       "targets": [
         {
-          "expr": "rate(sentiment_model_errors_total[5m]) / rate(sentiment_model_requests_total[5m])",
+          "expr": "rate(text_analysis_model_errors_total[5m]) / rate(text_analysis_model_requests_total[5m])",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -110,7 +110,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, rate(sentiment_model_latency_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.5, rate(text_analysis_model_latency_seconds_bucket[5m]))",
           "legendFormat": "p50 {{model}}",
           "refId": "A"
         }
@@ -129,7 +129,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(sentiment_model_latency_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.95, rate(text_analysis_model_latency_seconds_bucket[5m]))",
           "legendFormat": "p95 {{model}}",
           "refId": "A"
         }
@@ -148,7 +148,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, rate(sentiment_model_latency_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(text_analysis_model_latency_seconds_bucket[5m]))",
           "legendFormat": "p99 {{model}}",
           "refId": "A"
         }
@@ -171,7 +171,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "right" }, "pieType": "pie" },
       "targets": [
         {
-          "expr": "sum by (label) (increase(sentiment_model_latency_seconds_count[24h]))",
+          "expr": "sum by (label) (increase(text_analysis_model_latency_seconds_count[24h]))",
           "legendFormat": "{{label}}",
           "refId": "A"
         }
@@ -197,7 +197,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (model, label) (increase(sentiment_model_latency_seconds_count[24h]))",
+          "expr": "sum by (model, label) (increase(text_analysis_model_latency_seconds_count[24h]))",
           "legendFormat": "{{model}} — {{label}}",
           "refId": "A"
         }
@@ -223,7 +223,7 @@
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
       "targets": [
         {
-          "expr": "histogram_quantile(0.5, rate(sentiment_model_confidence_score_bucket[5m]))",
+          "expr": "histogram_quantile(0.5, rate(text_analysis_model_confidence_score_bucket[5m]))",
           "legendFormat": "p50 {{model}}",
           "refId": "A"
         }
@@ -247,7 +247,7 @@
       },
       "targets": [
         {
-          "expr": "histogram_quantile(0.99, rate(sentiment_model_latency_seconds_bucket[5m]))",
+          "expr": "histogram_quantile(0.99, rate(text_analysis_model_latency_seconds_bucket[5m]))",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -283,7 +283,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (model) (increase(sentiment_model_requests_total[1h]))",
+          "expr": "sum by (model) (increase(text_analysis_model_requests_total[1h]))",
           "legendFormat": "{{model}}",
           "refId": "A"
         }
@@ -294,7 +294,7 @@
   ],
   "refresh": "30s",
   "schemaVersion": 38,
-  "tags": ["sentiment", "ml"],
+  "tags": ["text-analysis", "ml"],
   "templating": {
     "list": [
       {
@@ -313,7 +313,7 @@
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Sentiment Analysis",
-  "uid": "sentimentanalysis",
+  "title": "Text Analysis",
+  "uid": "textanalysis",
   "version": 1
 }

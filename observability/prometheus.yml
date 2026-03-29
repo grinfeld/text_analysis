@@ -3,7 +3,7 @@ global:
   evaluation_interval: 15s
 
 scrape_configs:
-  - job_name: sentiment-backend
+  - job_name: text-analysis-backend
     static_configs:
       - targets: ["backend:8000"]
     metrics_path: /metrics

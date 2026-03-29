@@ -181,7 +181,7 @@ Candidate slugs used by zero-shot and embedding models, and as examples for the 
 
 ## Model Server
 
-All model containers use a single Docker image (`sentiment/model-server:latest`) built from `model_server/`. The `TASK` environment variable selects the inference path; `MODEL_NAME` sets the HuggingFace model to load.
+All model containers use a single Docker image (`text-analysis/model-server:latest`) built from `model_server/`. The `TASK` environment variable selects the inference path; `MODEL_NAME` sets the HuggingFace model to load.
 
 Handler classes are defined in `model_server/handlers.py`; `model_server/server.py` owns only the FastAPI app and routes.
 
@@ -195,7 +195,7 @@ Handler classes are defined in `model_server/handlers.py`; `model_server/server.
 
 `CANDIDATE_LABELS` is a comma-separated string of classification targets.
 
-The Docker image is built once (on the first service that declares `build:` for each profile) and reused by all other model containers via `image: sentiment/model-server:latest`.
+The Docker image is built once (on the first service that declares `build:` for each profile) and reused by all other model containers via `image: text-analysis/model-server:latest`.
 
 ---
 
@@ -216,12 +216,12 @@ Emitted per model client inside `predict()`, not at the HTTP layer.
 
 | Metric | Type | Labels |
 |--------|------|--------|
-| `sentiment_model_requests_total` | Counter | `model` |
-| `sentiment_model_errors_total` | Counter | `model`, `error_type` |
-| `sentiment_model_latency_seconds` | Histogram | `model`, `label` |
-| `sentiment_model_confidence_score` | Histogram | `model`, `label` |
+| `text_analysis_model_requests_total` | Counter | `model` |
+| `text_analysis_model_errors_total` | Counter | `model`, `error_type` |
+| `text_analysis_model_latency_seconds` | Histogram | `model`, `label` |
+| `text_analysis_model_confidence_score` | Histogram | `model`, `label` |
 
-Prometheus scrapes `http://backend:8000/metrics` every 15 s. The Grafana dashboard ("Sentiment Analysis") is pre-provisioned — no manual setup needed.
+Prometheus scrapes `http://backend:8000/metrics` every 15 s. The Grafana dashboard ("Text Analysis") is pre-provisioned — no manual setup needed.
 
 ---
 
@@ -244,7 +244,7 @@ model_server/
   Dockerfile                  Single image for all model containers
   Dockerfile.vllm             vllm/vllm-openai image (Linux only)
 
-src/sentiment/
+src/text_analysis/
   main.py                     App factory, lifespan, CORS, /metrics
   config.py                   Settings + load_model_configs() with env var expansion
   registry.py                 Builds clients from config.yaml at startup

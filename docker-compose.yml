@@ -1,7 +1,7 @@
 # ── Extension templates ────────────────────────────────────────────────────────
 
 x-model-hf: &model-hf
-  image: sentiment/model-server:latest
+  image: text-analysis/model-server:latest
   environment:
     HF_HOME: /hf_cache
   volumes:
@@ -40,7 +40,7 @@ x-model-embedding: &model-embedding
     start_period: 60s
 
 x-model-lexicon: &model-lexicon
-  image: sentiment/model-server:latest
+  image: text-analysis/model-server:latest
   healthcheck:
     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
     interval: 10s
@@ -57,7 +57,7 @@ services:
     profiles: [sentiment]
     build:
       context: ./model_server
-    image: sentiment/model-server:latest
+    image: text-analysis/model-server:latest
     environment:
       MODEL_NAME: siebert/sentiment-roberta-large-english
       HF_HOME: /hf_cache
@@ -109,7 +109,7 @@ services:
     profiles: [topic]
     build:
       context: ./model_server
-    image: sentiment/model-server:latest
+    image: text-analysis/model-server:latest
     environment:
       MODEL_NAME: MoritzLaurer/deberta-v3-base-zeroshot-v1
       TASK: zero-shot-classification
