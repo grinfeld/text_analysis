@@ -258,6 +258,8 @@ services:
       LOG_FORMAT: json
       VLLM_URL: ${LLM_URL:-http://vllm:8900}
       MAX_CONCURRENT_PER_REQUEST: 4
+      LABEL_RESOLUTION_URL: ${LABEL_RESOLUTION_URL:-http://e5-small:8000}
+      ENABLED_MODELS: ${ENABLED_MODELS:-*}
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./discovered_labels.json:/app/discovered_labels.json

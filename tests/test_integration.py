@@ -33,7 +33,7 @@ from text_analysis.clients.model_server import ModelServerClient
 # ---------------------------------------------------------------------------
 TINY_MODEL = "hf-internal-testing/tiny-random-RobertaForSequenceClassification"
 
-TINY_LABEL_MAP = {"LABEL_0": "negative", "LABEL_1": "positive"}
+TINY_LABEL_MAP = {"label_0": "negative", "label_1": "positive"}
 
 _MODEL_SERVER_CONTEXT = os.path.join(os.path.dirname(__file__), "..", "model_server")
 

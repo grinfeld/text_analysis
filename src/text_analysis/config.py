@@ -21,6 +21,12 @@ class Settings(BaseSettings):
     # Concurrency — max model calls to run in parallel within a single request
     max_concurrent_per_request: int = 4
 
+    # URL of the embedding model used for novel label resolution after LLM inference
+    label_resolution_url: str | None = None
+
+    # Comma-separated list of model names to enable, or "*" for all
+    enabled_models: str = "*"
+
 
 settings = Settings()
 

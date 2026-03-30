@@ -10,7 +10,7 @@ from text_analysis.clients.vllm import (
     TOPIC_SYSTEM_PROMPT,
     TOPIC_USER_PROMPT_TEMPLATE,
 )
-from text_analysis.config import load_model_configs, load_all_candidates, load_domain_candidates, candidate_store
+from text_analysis.config import settings, load_model_configs, load_all_candidates, load_domain_candidates, candidate_store
 
 _VALID_TASKS = {"sentiment", "topic", "llm"}
 
@@ -30,7 +30,12 @@ def init() -> None:
     domain_map = load_domain_candidates()
     candidate_store.__init__(topic_candidate_labels, domain_config=domain_map)
 
-    e5_small_url = next(
+    enabled = settings.enabled_models.strip()
+    if enabled != "*":
+        enabled_set = {m.strip() for m in enabled.split(",")}
+        all_configs = [c for c in all_configs if c.name in enabled_set]
+
+    e5_small_url = settings.label_resolution_url or next(
         (c.url for c in all_configs if c.name == "intfloat/e5-small-v2"),
         None,
     )
