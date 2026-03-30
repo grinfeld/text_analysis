@@ -1,7 +1,8 @@
 {
   "medicine": [
     "respiratory_issue",
-    "oxygen_administration"
+    "oxygen_administration",
+    "renal_disease"
   ],
   "logistics": [
     "inspection"
