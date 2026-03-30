@@ -36,8 +36,9 @@ _DISCOVERED_PATH = Path("discovered_labels.json")
 class CandidateStore:
     """In-memory topic candidate labels — config labels + per-domain discovered labels persisted to disk."""
 
-    def __init__(self, config_labels: list[str]) -> None:
+    def __init__(self, config_labels: list[str], domain_config: dict[str, list[str]] | None = None) -> None:
         self._config: set[str] = set(config_labels)
+        self._domain_config: dict[str, list[str]] = domain_config or {}
         # domain → list of discovered labels for that domain
         self._discovered: dict[str, list[str]] = {}
         if _DISCOVERED_PATH.exists():
@@ -53,13 +54,16 @@ class CandidateStore:
                 self._discovered = {}
 
     def all(self, domain: str | None = None) -> list[str]:
-        """Return config labels plus discovered labels.
+        """Return candidate labels plus discovered labels.
 
-        If domain is given, only include discovered labels for that domain.
-        Otherwise include all discovered labels across all domains.
+        If domain is given, return only that domain's config labels plus its discovered labels.
+        Otherwise return the full config set plus all discovered labels.
         """
         if domain:
-            discovered = self._discovered.get(domain, [])
+            base = list(self._domain_config.get(domain, []))
+            base_set = set(base)
+            discovered = [l for l in self._discovered.get(domain, []) if l not in base_set]
+            return base + discovered
         else:
             seen: set[str] = set()
             discovered = []
@@ -68,7 +72,7 @@ class CandidateStore:
                     if l not in seen:
                         seen.add(l)
                         discovered.append(l)
-        return list(self._config) + [l for l in discovered if l not in self._config]
+            return list(self._config) + [l for l in discovered if l not in self._config]
 
     def add(self, label: str, domain: str | None = None) -> None:
         key = domain or "_unknown"

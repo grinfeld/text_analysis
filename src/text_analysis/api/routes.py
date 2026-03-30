@@ -7,14 +7,13 @@ from fastapi import APIRouter
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from text_analysis.clients.base import ModelClientError
-from text_analysis.config import settings, candidate_store, VALID_DOMAINS, load_domain_candidates
+import text_analysis.config as _config
+from text_analysis.config import settings, VALID_DOMAINS
 from text_analysis.registry import get_clients_for
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter()
-
-_domain_candidates: dict[str, list[str]] = load_domain_candidates()
 
 
 class AnalyseRequest(BaseModel):
@@ -95,9 +94,9 @@ class CandidateEntry(BaseModel):
 @router.get("/candidates")
 def candidates() -> list[CandidateEntry]:
     result = []
-    for label in candidate_store.all():
-        if candidate_store.is_discovered(label):
-            domain = candidate_store.discovered_domain(label)
+    for label in _config.candidate_store.all():
+        if _config.candidate_store.is_discovered(label):
+            domain = _config.candidate_store.discovered_domain(label)
             result.append(CandidateEntry(label=label, source="discovered", domain=domain))
         else:
             result.append(CandidateEntry(label=label, source="config"))
@@ -107,8 +106,8 @@ def candidates() -> list[CandidateEntry]:
 @router.post("/analyse", response_model=AnalyseResponse)
 async def analyse(req: AnalyseRequest) -> AnalyseResponse:
     candidate_override: list[str] | None = None
-    if req.domain and req.for_ == "topic":
-        candidate_override = _domain_candidates.get(req.domain)
+    if req.for_ == "topic":
+        candidate_override = _config.candidate_store.all(domain=req.domain if req.domain else None)
 
     clients = get_clients_for(req.for_)
     sem = asyncio.Semaphore(settings.max_concurrent_per_request)

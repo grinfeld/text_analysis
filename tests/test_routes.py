@@ -346,7 +346,7 @@ class TestDomainField:
 
     @respx.mock
     def test_domain_appended_to_vllm_prompt(self, client):
-        """Domain is included in the text sent to vLLM."""
+        """Domain is included as a line in the prompt sent to vLLM."""
         captured = {}
 
         async def capture_vllm(request):
@@ -354,15 +354,17 @@ class TestDomainField:
             content = json.dumps({"label": "positive", "score": 0.88})
             return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
 
-        _mock_sentiment_models(siebert_label="POSITIVE", siebert_score=0.95)
+        for host in ["deberta", "deberta-large", "nli-deberta", "bart",
+                     "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
+            respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
         respx.post("http://localhost:8900/v1/chat/completions").mock(side_effect=capture_vllm)
 
-        resp = client.post("/analyse", json={"text": "Malware detected.", "domain": "cybersecurity"})
+        resp = client.post("/analyse", json={"text": "Malware detected.", "for": "topic", "domain": "cybersecurity"})
         assert resp.status_code == 200
         import json as _json
         body = _json.loads(captured["body"])
         user_content = body["messages"][1]["content"]
-        assert "[domain: cybersecurity]" in user_content
+        assert "Domain: Cybersecurity" in user_content
 
     @respx.mock
     def test_domain_topic_filters_candidates(self, client):
