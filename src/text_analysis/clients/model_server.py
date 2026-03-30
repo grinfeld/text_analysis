@@ -1,5 +1,6 @@
 import httpx
 import structlog
+from slugify import slugify
 
 from text_analysis.clients.base import ModelClient, ModelClientError, PredictionResult
 
@@ -26,20 +27,21 @@ class ModelServerClient(ModelClient):
 
     def _normalise_label(self, raw_label: str) -> str:
         if not self._label_map:
-            return raw_label
+            return slugify(raw_label, separator="_")
         normalised = self._label_map.get(raw_label) or self._label_map.get(raw_label.lower())
         if normalised is None:
             logger.warning("unknown_label", model=self.model_name, raw_label=raw_label)
             return "neutral"
         return normalised
 
-    async def _predict(self, text: str) -> PredictionResult:
+    async def _predict(self, text: str, candidate_labels: list[str] | None = None, **kwargs) -> PredictionResult:
         url = f"{self._base_url}/predict"
+        effective_labels = candidate_labels if candidate_labels is not None else self._candidate_labels
         payload: dict = {"text": text}
-        if self._candidate_labels:
-            payload["candidate_labels"] = self._candidate_labels
+        if effective_labels:
+            payload["candidate_labels"] = effective_labels
         try:
-            response = await self._http.post(url, json=payload, timeout=30.0)
+            response = await self._http.post(url, json=payload, timeout=120.0)
             response.raise_for_status()
         except httpx.TimeoutException as exc:
             raise ModelClientError(f"Timeout calling {url}") from exc

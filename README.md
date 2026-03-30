@@ -21,8 +21,9 @@ Three Docker Compose profiles control which model containers start:
 ### Using the scripts
 
 ```bash
-./start.sh   # interactive: asks OS and model profiles, builds model-server image, starts detached
-./down.sh    # stops all containers (all profiles)
+./start.sh            # interactive: asks OS and model profiles, builds model-server image, starts detached
+./stop.sh             # stops all containers (all profiles), keeps them for restart
+./down.sh             # stops and removes all containers (all profiles)
 ./down.sh --volumes   # also removes the hf_cache volume
 ```
 
@@ -74,15 +75,29 @@ docker compose --profile sentiment --profile topic --profile linux up -d
 
 `LLM_URL` defaults to `http://vllm:8900` when not set, so no export needed.
 
-### Manual stop
+### Manual stop / down
 
 ```bash
-# Stop all profiles
+# Stop containers (keep them, restart with docker compose start)
+docker compose --profile sentiment --profile topic --profile linux stop
+
+# Stop and remove containers
 docker compose --profile sentiment --profile topic --profile linux down
 
-# Stop and remove the model weights cache volume
+# Stop, remove containers, and remove the model weights cache volume
 docker compose --profile sentiment --profile topic --profile linux down --volumes
 ```
+
+### Rebuilding after code changes
+
+The model-server image is pre-built and reused by all model containers. Rebuild it explicitly when `model_server/` changes:
+
+```bash
+docker build -t text-analysis/model-server:latest ./model_server
+docker compose --profile topic up -d --force-recreate
+```
+
+The backend image is rebuilt automatically by `docker compose up --build`.
 
 ---
 
@@ -94,8 +109,8 @@ First run downloads model weights — this can take several minutes. VADER and N
 
 | Service | URL | Description |
 |---------|-----|-------------|
-| Frontend | http://localhost:8080 | Single-page UI |
-| Backend API | http://localhost:8000 | FastAPI — `POST /analyse` |
+| Frontend | http://localhost:8080 | Single-page UI — text input, task + domain dropdowns |
+| Backend API | http://localhost:8000 | FastAPI — `POST /analyse`, `GET /candidates` |
 | Prometheus | http://localhost:9090 | Metrics scraper |
 | Grafana | http://localhost:3000 | Dashboard (admin / admin) |
 | mlx-lm / vLLM | http://localhost:8900 | OpenAI-compatible LLM API |
@@ -104,14 +119,25 @@ First run downloads model weights — this can take several minutes. VADER and N
 
 ## API
 
+### POST /analyse
+
 ```http
 POST /analyse
 Content-Type: application/json
 
-{ "text": "The product exceeded all my expectations.", "for": "sentiment" }
+{ "text": "The product exceeded all my expectations.", "for": "sentiment", "domain": "finance" }
 ```
 
-`for` is optional, defaults to `"sentiment"`. Valid values: `"sentiment"`, `"topic"`.
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `text` | string | required | Text to analyse |
+| `for` | string | `"sentiment"` | Task: `"sentiment"` or `"topic"` |
+| `domain` | string | `null` | Optional domain context: `intelligence`, `cybersecurity`, `networking`, `medicine`, `finance`, `logistics`, `military`, `human_resources`, `legal` |
+
+**When `domain` is provided:**
+- Topic models receive only domain-scoped candidate labels (instead of the full list) — improves precision and reduces latency
+- The LLM receives the domain as a line immediately before the text: `Domain: Finance`
+- Sentiment models are unaffected (they have fixed label sets)
 
 Response:
 
@@ -140,13 +166,28 @@ Response:
 
 All models return `labels` as a ranked list. Sentiment models return one entry; topic models return up to 3. A failed model returns `labels: []` and `error: "<message>"` — it does not abort the rest.
 
-Models run sequentially in the order defined in `config.yaml`.
+Models run concurrently (up to `MAX_CONCURRENT_PER_REQUEST` in parallel) in the order defined in `config.yaml`.
+
+### GET /candidates
+
+Returns the full live topic candidate label list, including labels discovered by the LLM at runtime.
+
+```json
+[
+  { "label": "financial_crime", "source": "config" },
+  { "label": "wire_transfer_scheme", "source": "discovered" }
+]
+```
+
+`source` is `"config"` for labels defined in `config.yaml`, `"discovered"` for novel labels proposed by the LLM and confirmed as genuinely new (similarity < 0.92 against all known candidates via `e5-small`). Discovered labels also include a `domain` field (the domain that was active when the label was found, or `null` if no domain was specified).
 
 ---
 
 ## Configuration
 
 `config.yaml` is mounted into the backend container at `/app/config.yaml`. Edit it to add, remove, or reorder models without rebuilding the backend.
+
+The `domain_candidates` top-level key in `config.yaml` maps domain names to their candidate slug subsets. Add or edit these without rebuilding anything.
 
 ```yaml
 models:
@@ -158,6 +199,11 @@ models:
       POSITIVE: positive
       NEGATIVE: negative
 
+  - name: my-topic-model
+    for: topic
+    type: ml
+    url: http://host:port
+
   - name: my-llm
     for: llm              # registers one client for sentiment AND one for topic
     type: llm
@@ -166,6 +212,8 @@ models:
 ```
 
 `for: llm` is special — a single config entry registers two clients automatically (one for sentiment, one for topic) using different prompts.
+
+Candidate labels are no longer defined per model entry. They are derived at startup by flattening `domain_candidates` into a deduplicated list — a single source of truth. Domain-scoped subsets are sent to topic models when a `domain` is specified in the request; the full flattened list is used otherwise.
 
 ---
 
@@ -185,27 +233,27 @@ models:
 
 ### Topic — zero-shot NLI (`for: topic`, profile: `topic`)
 
-Classify directly against taxonomy slugs as candidate labels:
+Classify directly against candidate slugs as hypotheses. Labels are sent in the request payload; processed in chunks of 20 to handle large candidate lists:
 
 | Name | Container | Notes |
 |------|-----------|-------|
 | `MoritzLaurer/deberta-v3-base-zeroshot-v1` | `deberta` | DeBERTa, 86M, recommended small zero-shot |
-| `MoritzLaurer/deberta-v3-large-zeroshot-v1` | `deberta_large` | DeBERTa, 400M, higher accuracy |
-| `cross-encoder/nli-deberta-v3-large` | `nli_deberta` | NLI cross-encoder, 400M |
+| `MoritzLaurer/deberta-v3-large-zeroshot-v1` | `deberta-large` | DeBERTa, 400M, higher accuracy |
+| `cross-encoder/nli-deberta-v3-large` | `nli-deberta` | NLI cross-encoder, 400M |
 | `facebook/bart-large-mnli` | `bart` | BART, 400M, widely-used zero-shot baseline |
 
 ### Topic — embedding similarity (`for: topic`, profile: `topic`)
 
-Embed text and find nearest topic slugs by cosine similarity (top 3 returned):
+Embed text and find nearest candidate slugs by cosine similarity (top 3 returned). Label embeddings are cached per candidate set:
 
 | Name | Container | Notes |
 |------|-----------|-------|
-| `BAAI/bge-small-en-v1.5` | `bge_small` | 33M, recommended default embedder |
-| `BAAI/bge-large-en-v1.5` | `bge_large` | 335M, higher accuracy |
+| `BAAI/bge-small-en-v1.5` | `bge-small` | 33M, recommended default embedder |
+| `BAAI/bge-large-en-v1.5` | `bge-large` | 335M, higher accuracy |
 | `sentence-transformers/all-MiniLM-L6-v2` | `minilm` | 22M, fastest |
 | `sentence-transformers/all-mpnet-base-v2` | `mpnet` | 110M, good mid-tier |
-| `intfloat/e5-small-v2` | `e5_small` | 33M, retrieval-focused |
-| `intfloat/e5-large-v2` | `e5_large` | 335M, best E5 variant |
+| `intfloat/e5-small-v2` | `e5-small` | 33M, retrieval-focused; also used for novel label resolution |
+| `intfloat/e5-large-v2` | `e5-large` | 335M, best E5 variant |
 
 ### LLM (`for: llm`, shared for both tasks)
 
@@ -213,13 +261,47 @@ Embed text and find nearest topic slugs by cosine similarity (top 3 returned):
 |------|-----------|-------|
 | `vllm` | host / `vllm` | Qwen2.5-7B-Instruct via mlx-lm (macOS) or vLLM container (Linux) |
 
-A single config entry registers two clients — one uses the sentiment prompt (returns single label: positive / neutral / negative), the other uses the topic prompt (returns ranked top-3 slugs).
+A single config entry registers two clients — one uses the sentiment prompt (returns single label: `positive` / `neutral` / `negative`), the other uses the topic prompt (returns ranked top-3 slugs).
+
+**Topic prompt behaviour:** The LLM is instructed to return 3 ranked topic labels, at least one of which must be a broad category-level generalisation (e.g. `clinical_diagnosis`, `threat_assessment`). When a domain is specified, it is included in the prompt as `Domain: <Name>` immediately before the text. Novel labels are post-processed via `e5-small`: if cosine similarity ≥ 0.92 against a known candidate the novel label is replaced with the match; otherwise it is added to the in-memory discovered list and persisted to `discovered_labels.json` under the active domain key.
 
 ### Topic taxonomy
 
-Candidate slugs used by zero-shot and embedding models, and as examples for the LLM:
+All candidate slugs are defined in `domain_candidates` in `config.yaml` — the single source of truth. The full flattened list is used when no domain is specified; domain-scoped subsets are used when a domain is provided.
 
-`arms_trafficking`, `financial_crime`, `surveillance_operation`, `human_intelligence`, `signals_intelligence`, `covert_operation`, `money_laundering`, `sanctions_evasion`, `recruitment`, `daily_reporting`, `network_configuration`, `routing`, `administrative`, `organizational_structure`, `spatial_context`, `temporal_reference`
+**Intelligence (15):** `human_intelligence`, `signals_intelligence`, `covert_operation`, `surveillance_operation`, `counterintelligence`, `open_source_intelligence`, `geospatial_intelligence`, `covert_communication`, `technical_intelligence`, `imagery_intelligence`, `cyber_intelligence`, `all_source_analysis`, `intelligence_sharing`, `agent_handling`, `intelligence_operation`
+
+**Cybersecurity (19):** `malware`, `phishing`, `vulnerability_exploitation`, `data_exfiltration`, `denial_of_service`, `command_and_control`, `ransomware`, `zero_day_exploit`, `botnet`, `web_application_attack`, `iot_attack`, `cyber_espionage`, `identity_theft`, `supply_chain_attack`, `incident_response`, `cyber_intrusion`, `cryptojacking`, `deepfake`, `dark_web`
+
+**Networking (10):** `network_configuration`, `routing`, `network_monitoring`, `vpn_tunneling`, `firewall_policy`, `dns_management`, `bandwidth_management`, `network_access_control`, `network_segmentation`, `network_infrastructure`
+
+**Finance (11):** `financial_crime`, `money_laundering`, `sanctions_evasion`, `tax_evasion`, `insider_trading`, `bribery_corruption`, `asset_seizure`, `trade_finance_fraud`, `cryptocurrency_crime`, `ponzi_scheme`, `financial_intelligence`
+
+**Logistics (10):** `logistics`, `maritime_transport`, `air_transport`, `ground_transport`, `smuggling_route`, `customs_evasion`, `fuel_supply`, `logistics_supply`, `vehicle_surveillance`, `border_control`
+
+**Military (10):** `military_operation`, `weapons_system`, `troop_movement`, `command_structure`, `electronic_warfare`, `psychological_operations`, `force_protection`, `military_intelligence`, `arms_trafficking`, `covert_operation`
+
+**Medicine (5):** `clinical_diagnosis`, `pharmaceutical_trial`, `surgical_procedure`, `patient_triage`, `medical_imaging`
+
+**Human Resources (5):** `employee_onboarding`, `performance_review`, `workforce_planning`, `disciplinary_action`, `compensation_benefits`
+
+**Legal (5):** `contract_dispute`, `regulatory_compliance`, `litigation_filing`, `intellectual_property`, `criminal_prosecution`
+
+---
+
+## Label Discovery
+
+The LLM topic client implements self-learning taxonomy expansion:
+
+1. LLM returns 3 ranked topic labels (at least one broad category-level label per prompt instructions)
+2. Each novel label (not in the known candidate list) is sent to `e5-small` for cosine similarity against known candidates for the active domain (or all candidates if no domain)
+3. If similarity ≥ 0.92 → replaced with the matching known candidate (near-duplicate)
+4. If similarity < 0.92 → genuinely new; added to the in-memory `CandidateStore` under the active domain key and persisted to `discovered_labels.json`
+5. Discovered labels are loaded from `discovered_labels.json` on backend startup and included in all subsequent model requests
+
+`discovered_labels.json` stores labels as a dict keyed by domain (e.g. `{"medicine": ["respiratory_issue"], "cybersecurity": ["firmware_backdoor"]}`). Labels discovered without a domain are stored under `_unknown`.
+
+`GET /candidates` returns all labels with `"source": "config"` or `"source": "discovered"`, plus a `"domain"` field for discovered labels.
 
 ---
 
@@ -232,12 +314,14 @@ Handler classes are defined in `model_server/handlers.py`; `model_server/server.
 | `TASK` | Handler | Required env vars |
 |--------|---------|-------------------|
 | `text-classification` | `TextClassificationHandler` | `MODEL_NAME` |
-| `zero-shot-classification` | `ZeroShotClassificationHandler` | `MODEL_NAME`, `CANDIDATE_LABELS` |
-| `embedding` | `EmbeddingHandler` | `MODEL_NAME`, `CANDIDATE_LABELS` |
+| `zero-shot-classification` | `ZeroShotClassificationHandler` | `MODEL_NAME` |
+| `embedding` | `EmbeddingHandler` | `MODEL_NAME` |
 | `vader` | `VaderHandler` | — |
 | `nrc` | `NrcHandler` | — |
 
-`CANDIDATE_LABELS` is a comma-separated string of classification targets.
+Candidate labels are not baked into the container — they are sent in the `/predict` request payload by the backend, sourced from `config.yaml`. Zero-shot models process them in chunks of 20 to bound per-request latency. Embedding models cache label embeddings per candidate set.
+
+All labels returned by the model server are normalized to `snake_case` via `python-slugify`.
 
 The `/predict` endpoint always returns:
 
@@ -245,9 +329,7 @@ The `/predict` endpoint always returns:
 { "labels": [{ "label": "...", "score": 0.87 }, ...] }
 ```
 
-Single-label handlers (text-classification, vader, nrc) return a one-item list. Zero-shot and embedding handlers return top-3.
-
-The Docker image is built once and reused by all model containers via `image: text-analysis/model-server:latest`.
+Single-label handlers (`text-classification`, `vader`, `nrc`) return a one-item list. Zero-shot and embedding handlers return top-3.
 
 ---
 
@@ -281,9 +363,11 @@ Prometheus scrapes `http://text-analysis-backend:8000/metrics` every 15 s. The G
 ## Project Structure
 
 ```
-config.yaml                   Model definitions (edit to add/remove models)
+config.yaml                   Model definitions and candidate label taxonomy
+discovered_labels.json        LLM-discovered topic labels (persisted across restarts)
 start.sh                      Interactive launcher — prompts OS + profiles, builds image
-down.sh                       Stops all containers (all profiles)
+stop.sh                       Stops all containers (all profiles), keeps them for restart
+down.sh                       Stops and removes all containers (all profiles)
 
 Dockerfile                    text-analysis-backend image (FastAPI, uv)
 docker-compose.yml            All services; sentiment/topic/linux profiles
@@ -295,19 +379,21 @@ model_server/
   server.py                   FastAPI app + /predict and /health routes
   handlers.py                 TaskHandler ABC + concrete implementations
                               (TextClassification, ZeroShot, Embedding, Vader, Nrc)
-  requirements.txt            All deps: transformers, sentence-transformers, nltk, nrclex
+                              ZeroShot processes candidate_labels in chunks of 20
+                              Embedding caches label embeddings per candidate set
+  requirements.txt            All deps: transformers, sentence-transformers, nltk, nrclex, python-slugify
   Dockerfile                  Single image (text-analysis/model-server:latest)
   Dockerfile.vllm             vllm/vllm-openai image (Linux only)
 
 src/text_analysis/
   main.py                     App factory, lifespan, CORS, /metrics
-  config.py                   Settings + load_model_configs() with env var expansion
+  config.py                   Settings + load_model_configs() + load_domain_candidates() + load_all_candidates() + CandidateStore
   registry.py                 Builds clients from config.yaml at startup
-  api/routes.py               POST /analyse — accepts "for": "sentiment"|"topic"
+  api/routes.py               POST /analyse · GET /candidates
   clients/
     base.py                   ModelClient ABC + PredictionResult + metrics + timing
-    model_server.py           ModelServerClient (all model containers)
-    vllm.py                   VllmClient (OpenAI-compatible, sentiment + topic prompts)
+    model_server.py           ModelServerClient — normalizes labels via python-slugify
+    vllm.py                   VllmClient — sentiment + topic prompts, novel label resolution
   observability/
     logging.py                structlog (JSON or console)
     metrics.py                OTEL MeterProvider + Prometheus exporter

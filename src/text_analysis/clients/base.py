@@ -35,15 +35,15 @@ class ModelClient(ABC):
     task: str
 
     @abstractmethod
-    async def _predict(self, text: str) -> PredictionResult:
+    async def _predict(self, text: str, **kwargs) -> PredictionResult:
         """Perform the actual prediction. Implement in subclasses."""
 
-    async def predict(self, text: str) -> PredictionResult:
+    async def predict(self, text: str, **kwargs) -> PredictionResult:
         """Public entry point — wraps _predict with metrics recording."""
         metrics.record_request(self.model_name)
         start = time.perf_counter()
         try:
-            result = await self._predict(text)
+            result = await self._predict(text, **kwargs)
         except ModelClientError:
             elapsed = time.perf_counter() - start
             metrics.record_error(self.model_name, "client_error")

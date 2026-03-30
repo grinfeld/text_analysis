@@ -40,6 +40,7 @@ fi
 # ── LLM URL ───────────────────────────────────────────────────────────────────
 if [ "$OS" = "macos" ]; then
   export LLM_URL="${LLM_URL:-http://host.docker.internal:8900}"
+  echo "using $LLM_URL"
 fi
 
 # ── Build profile flags ───────────────────────────────────────────────────────
@@ -54,4 +55,4 @@ echo "Starting: profiles=[${PROFILES}]"
 echo ""
 
 # shellcheck disable=SC2086
-docker compose $PROFILE_FLAGS up -d --build
+docker compose $PROFILE_FLAGS up -d --build --force-recreate

@@ -36,8 +36,8 @@ _TOP3 = [("financial_crime", 0.87), ("money_laundering", 0.60), ("sanctions_evas
 
 def _mock_topic_models():
     """Register respx mocks for all 11 topic models in config.yaml order."""
-    for host in ["deberta", "deberta_large", "nli_deberta", "bart",
-                 "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
+    for host in ["deberta", "deberta-large", "nli-deberta", "bart",
+                 "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
         respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
     # vllm topic returns labels list
     content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
@@ -193,8 +193,8 @@ class TestAnalyseTopicEndpoint:
         respx.post("http://deberta:8000/predict").mock(
             side_effect=httpx.ConnectError("connection refused")
         )
-        for host in ["deberta_large", "nli_deberta", "bart",
-                     "bge_small", "bge_large", "minilm", "mpnet", "e5_small", "e5_large"]:
+        for host in ["deberta-large", "nli-deberta", "bart",
+                     "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
             respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
         content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
         respx.post("http://localhost:8900/v1/chat/completions").mock(
@@ -323,3 +323,103 @@ class TestConcurrency:
         resp = client.post("/analyse", json={"text": "Test."})
         assert resp.status_code == 200
         assert len(resp.json()["results"]) == 8
+
+
+class TestDomainField:
+    def test_invalid_domain_returns_422(self, client):
+        resp = client.post("/analyse", json={"text": "hello", "domain": "astrology"})
+        assert resp.status_code == 422
+
+    def test_empty_domain_string_treated_as_none(self, client):
+        # empty string is coerced to None — should not raise 422
+        # (models would actually be called, so we just check the validation passes)
+        resp = client.post("/analyse", json={"text": "hello", "domain": ""})
+        # 422 only if domain validation fails; any other status means it passed validation
+        assert resp.status_code != 422
+
+    @respx.mock
+    def test_valid_domain_returns_200(self, client):
+        _mock_sentiment_models()
+        resp = client.post("/analyse", json={"text": "Earnings beat estimates.", "domain": "finance"})
+        assert resp.status_code == 200
+        assert len(resp.json()["results"]) == 8
+
+    @respx.mock
+    def test_domain_appended_to_vllm_prompt(self, client):
+        """Domain is included in the text sent to vLLM."""
+        captured = {}
+
+        async def capture_vllm(request):
+            captured["body"] = request.content
+            content = json.dumps({"label": "positive", "score": 0.88})
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        _mock_sentiment_models(siebert_label="POSITIVE", siebert_score=0.95)
+        respx.post("http://localhost:8900/v1/chat/completions").mock(side_effect=capture_vllm)
+
+        resp = client.post("/analyse", json={"text": "Malware detected.", "domain": "cybersecurity"})
+        assert resp.status_code == 200
+        import json as _json
+        body = _json.loads(captured["body"])
+        user_content = body["messages"][1]["content"]
+        assert "[domain: cybersecurity]" in user_content
+
+    @respx.mock
+    def test_domain_topic_filters_candidates(self, client):
+        """For topic+domain, model receives only domain-scoped candidates."""
+        captured = {}
+
+        async def capture_deberta(request):
+            captured["body"] = request.content
+            return httpx.Response(200, json={"labels": [
+                {"label": "malware", "score": 0.9},
+                {"label": "phishing", "score": 0.6},
+                {"label": "ransomware", "score": 0.4},
+            ]})
+
+        respx.post("http://deberta:8000/predict").mock(side_effect=capture_deberta)
+        for host in ["deberta-large", "nli-deberta", "bart",
+                     "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
+            respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
+        content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        )
+
+        resp = client.post("/analyse", json={"text": "Ransomware encrypted all files.", "for": "topic", "domain": "cybersecurity"})
+        assert resp.status_code == 200
+        import json as _json
+        sent = _json.loads(captured["body"])
+        assert "candidate_labels" in sent
+        assert "malware" in sent["candidate_labels"]
+        assert "financial_crime" not in sent["candidate_labels"]
+
+    @respx.mock
+    def test_no_domain_uses_full_candidate_list(self, client):
+        """Without domain, topic models receive the full configured candidate list."""
+        captured = {}
+
+        async def capture_deberta(request):
+            captured["body"] = request.content
+            return httpx.Response(200, json={"labels": [
+                {"label": "financial_crime", "score": 0.87},
+                {"label": "money_laundering", "score": 0.60},
+                {"label": "sanctions_evasion", "score": 0.40},
+            ]})
+
+        respx.post("http://deberta:8000/predict").mock(side_effect=capture_deberta)
+        for host in ["deberta-large", "nli-deberta", "bart",
+                     "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
+            respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
+        content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
+        respx.post("http://localhost:8900/v1/chat/completions").mock(
+            return_value=httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+        )
+
+        resp = client.post("/analyse", json={"text": "Wire transfer.", "for": "topic"})
+        assert resp.status_code == 200
+        import json as _json
+        sent = _json.loads(captured["body"])
+        # Full list — both cybersecurity and finance slugs present
+        assert "malware" in sent["candidate_labels"]
+        assert "financial_crime" in sent["candidate_labels"]

@@ -10,7 +10,7 @@ from text_analysis.clients.vllm import (
     TOPIC_SYSTEM_PROMPT,
     TOPIC_USER_PROMPT_TEMPLATE,
 )
-from text_analysis.config import load_model_configs
+from text_analysis.config import load_model_configs, load_all_candidates, candidate_store
 
 _VALID_TASKS = {"sentiment", "topic", "llm"}
 
@@ -25,7 +25,16 @@ def init() -> None:
     _clients = []
     _http_clients = []
 
-    for model_cfg in load_model_configs():
+    all_configs = load_model_configs()
+    topic_candidate_labels = load_all_candidates()
+    candidate_store.__init__(topic_candidate_labels)
+
+    e5_small_url = next(
+        (c.url for c in all_configs if c.name == "intfloat/e5-small-v2"),
+        None,
+    )
+
+    for model_cfg in all_configs:
         task = model_cfg.for_ or "sentiment"
         if task not in _VALID_TASKS:
             raise ValueError(
@@ -43,7 +52,7 @@ def init() -> None:
                 http_client=http,
                 label_map=model_cfg.labels or {},
                 task=task,
-                candidate_labels=model_cfg.candidate_labels,
+                candidate_labels=topic_candidate_labels if task == "topic" else [],
             ))
         elif model_cfg.type == "llm":
             # for: llm means the same server is used for both sentiment and topic.
@@ -68,6 +77,9 @@ def init() -> None:
                     system_prompt=system_prompt,
                     user_prompt_template=user_prompt_template,
                     valid_labels=valid_labels,
+                    candidate_labels=topic_candidate_labels if llm_task == "topic" else [],
+                    candidate_store=candidate_store if llm_task == "topic" else None,
+                    e5_small_url=e5_small_url if llm_task == "topic" else None,
                 ))
 
 

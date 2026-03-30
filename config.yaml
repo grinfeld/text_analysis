@@ -72,78 +72,52 @@ models:
     for: topic
     type: ml
     url: http://deberta:8000
-    candidate_labels: &topic_labels
-      - arms_trafficking
-      - financial_crime
-      - surveillance_operation
-      - human_intelligence
-      - signals_intelligence
-      - covert_operation
-      - money_laundering
-      - sanctions_evasion
-      - recruitment
-      - daily_reporting
-      - network_configuration
-      - routing
-      - administrative
-      - organizational_structure
-      - spatial_context
-      - temporal_reference
 
   - name: MoritzLaurer/deberta-v3-large-zeroshot-v1
     for: topic
     type: ml
-    url: http://deberta_large:8000
-    candidate_labels: *topic_labels
+    url: http://deberta-large:8000
 
   - name: cross-encoder/nli-deberta-v3-large
     for: topic
     type: ml
-    url: http://nli_deberta:8000
-    candidate_labels: *topic_labels
+    url: http://nli-deberta:8000
 
   - name: facebook/bart-large-mnli
     for: topic
     type: ml
     url: http://bart:8000
-    candidate_labels: *topic_labels
 
   # Embedding similarity (cosine against slug label strings)
   - name: BAAI/bge-small-en-v1.5
     for: topic
     type: ml
-    url: http://bge_small:8000
-    candidate_labels: *topic_labels
+    url: http://bge-small:8000
 
   - name: BAAI/bge-large-en-v1.5
     for: topic
     type: ml
-    url: http://bge_large:8000
-    candidate_labels: *topic_labels
+    url: http://bge-large:8000
 
   - name: sentence-transformers/all-MiniLM-L6-v2
     for: topic
     type: ml
     url: http://minilm:8000
-    candidate_labels: *topic_labels
 
   - name: sentence-transformers/all-mpnet-base-v2
     for: topic
     type: ml
     url: http://mpnet:8000
-    candidate_labels: *topic_labels
 
   - name: intfloat/e5-small-v2
     for: topic
     type: ml
-    url: http://e5_small:8000
-    candidate_labels: *topic_labels
+    url: http://e5-small:8000
 
   - name: intfloat/e5-large-v2
     for: topic
     type: ml
-    url: http://e5_large:8000
-    candidate_labels: *topic_labels
+    url: http://e5-large:8000
 
   # ── LLM (shared — used for both sentiment and topic) ──────────────────────
   - name: vllm
@@ -151,4 +125,117 @@ models:
     type: llm
     url: ${VLLM_URL:-http://localhost:8900}
     model_id: mlx-community/Qwen2.5-7B-Instruct-4bit
+
+# ── Domain-scoped candidate label subsets ─────────────────────────────────────
+# Used when a request includes a "domain" field — models receive only the
+# domain-relevant candidates instead of the full list.
+
+domain_candidates:
+  intelligence:
+    - human_intelligence
+    - signals_intelligence
+    - covert_operation
+    - open_source_intelligence
+    - geospatial_intelligence
+    - technical_intelligence
+    - imagery_intelligence
+    - cyber_intelligence
+    - all_source_analysis
+    - intelligence_sharing
+    - agent_handling
+    - counterintelligence
+    - intelligence_operation
+    - covert_communication
+    - surveillance_operation
+
+  cybersecurity:
+    - malware
+    - phishing
+    - vulnerability_exploitation
+    - data_exfiltration
+    - denial_of_service
+    - command_and_control
+    - ransomware
+    - zero_day_exploit
+    - botnet
+    - web_application_attack
+    - iot_attack
+    - cyber_espionage
+    - identity_theft
+    - supply_chain_attack
+    - incident_response
+    - cyber_intrusion
+    - cryptojacking
+    - deepfake
+    - dark_web
+
+  networking:
+    - network_configuration
+    - routing
+    - network_monitoring
+    - vpn_tunneling
+    - firewall_policy
+    - dns_management
+    - bandwidth_management
+    - network_access_control
+    - network_segmentation
+    - network_infrastructure
+
+  finance:
+    - financial_crime
+    - money_laundering
+    - sanctions_evasion
+    - tax_evasion
+    - insider_trading
+    - bribery_corruption
+    - asset_seizure
+    - trade_finance_fraud
+    - cryptocurrency_crime
+    - ponzi_scheme
+    - financial_intelligence
+
+  logistics:
+    - logistics
+    - maritime_transport
+    - air_transport
+    - ground_transport
+    - smuggling_route
+    - customs_evasion
+    - fuel_supply
+    - logistics_supply
+    - vehicle_surveillance
+    - border_control
+
+  military:
+    - military_operation
+    - weapons_system
+    - troop_movement
+    - command_structure
+    - electronic_warfare
+    - psychological_operations
+    - force_protection
+    - military_intelligence
+    - arms_trafficking
+    - covert_operation
+
+  medicine:
+    - clinical_diagnosis
+    - pharmaceutical_trial
+    - surgical_procedure
+    - patient_triage
+    - medical_imaging
+
+  human_resources:
+    - employee_onboarding
+    - performance_review
+    - workforce_planning
+    - disciplinary_action
+    - compensation_benefits
+
+  legal:
+    - contract_dispute
+    - regulatory_compliance
+    - litigation_filing
+    - intellectual_property
+    - criminal_prosecution
 

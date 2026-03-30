@@ -1,0 +1,13 @@
+{
+  "medicine": [
+    "respiratory_issue",
+    "oxygen_administration"
+  ],
+  "logistics": [
+    "inspection"
+  ],
+  "intelligence": [
+    "shipping",
+    "intelligence"
+  ]
+}

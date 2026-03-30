@@ -6,7 +6,12 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
+from slugify import slugify
 from handlers import HANDLERS
+
+
+def _normalize_label(label: str) -> str:
+    return slugify(label, separator="_")
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -53,7 +58,7 @@ def predict(req: PredictRequest) -> PredictResponse:
     if not req.text.strip():
         raise HTTPException(status_code=422, detail="text must not be empty")
     results = _handler.predict(req.text, req.candidate_labels)
-    return PredictResponse(labels=[LabelScore(label=l, score=s) for l, s in results])
+    return PredictResponse(labels=[LabelScore(label=_normalize_label(l), score=s) for l, s in results])
 
 
 @app.get("/health")

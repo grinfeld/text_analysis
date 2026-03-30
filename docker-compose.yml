@@ -57,6 +57,7 @@ services:
     <<: *model-hf
     profiles: [sentiment]
     environment:
+      TASK: text-classification
       MODEL_NAME: siebert/sentiment-roberta-large-english
       HF_HOME: /hf_cache
 
@@ -64,6 +65,7 @@ services:
     <<: *model-hf
     profiles: [sentiment]
     environment:
+      TASK: text-classification
       MODEL_NAME: cardiffnlp/twitter-roberta-base-sentiment-latest
       HF_HOME: /hf_cache
 
@@ -71,6 +73,7 @@ services:
     <<: *model-hf
     profiles: [sentiment]
     environment:
+      TASK: text-classification
       MODEL_NAME: lxyuan/distilbert-base-multilingual-cased-sentiments-student
       HF_HOME: /hf_cache
 
@@ -78,6 +81,7 @@ services:
     <<: *model-hf
     profiles: [sentiment]
     environment:
+      TASK: text-classification
       MODEL_NAME: ProsusAI/finbert
       HF_HOME: /hf_cache
 
@@ -85,6 +89,7 @@ services:
     <<: *model-hf
     profiles: [sentiment]
     environment:
+      TASK: text-classification
       MODEL_NAME: nlptown/bert-base-multilingual-uncased-sentiment
       HF_HOME: /hf_cache
 
@@ -106,6 +111,7 @@ services:
     <<: *model-zeroshot
     profiles: [topic]
     environment:
+      TASK: zero-shot-classification
       MODEL_NAME: MoritzLaurer/deberta-v3-base-zeroshot-v1
       HF_HOME: /hf_cache
     healthcheck:
@@ -115,17 +121,19 @@ services:
       retries: 10
       start_period: 180s
 
-  deberta_large:
+  deberta-large:
     <<: *model-zeroshot
     profiles: [topic]
     environment:
+      TASK: zero-shot-classification
       MODEL_NAME: MoritzLaurer/deberta-v3-large-zeroshot-v1
       HF_HOME: /hf_cache
 
-  nli_deberta:
+  nli-deberta:
     <<: *model-zeroshot
     profiles: [topic]
     environment:
+      TASK: zero-shot-classification
       MODEL_NAME: cross-encoder/nli-deberta-v3-large
       HF_HOME: /hf_cache
 
@@ -133,22 +141,25 @@ services:
     <<: *model-zeroshot
     profiles: [topic]
     environment:
+      TASK: zero-shot-classification
       MODEL_NAME: facebook/bart-large-mnli
       HF_HOME: /hf_cache
 
   # ── Topic models — embedding similarity ───────────────────────────────────
 
-  bge_small:
+  bge-small:
     <<: *model-embedding
     profiles: [topic]
     environment:
+      TASK: embedding
       MODEL_NAME: BAAI/bge-small-en-v1.5
       HF_HOME: /hf_cache
 
-  bge_large:
+  bge-large:
     <<: *model-embedding
     profiles: [topic]
     environment:
+      TASK: embedding
       MODEL_NAME: BAAI/bge-large-en-v1.5
       HF_HOME: /hf_cache
     healthcheck:
@@ -162,6 +173,7 @@ services:
     <<: *model-embedding
     profiles: [topic]
     environment:
+      TASK: embedding
       MODEL_NAME: sentence-transformers/all-MiniLM-L6-v2
       HF_HOME: /hf_cache
 
@@ -169,6 +181,7 @@ services:
     <<: *model-embedding
     profiles: [topic]
     environment:
+      TASK: embedding
       MODEL_NAME: sentence-transformers/all-mpnet-base-v2
       HF_HOME: /hf_cache
     healthcheck:
@@ -178,17 +191,19 @@ services:
       retries: 5
       start_period: 120s
 
-  e5_small:
+  e5-small:
     <<: *model-embedding
     profiles: [topic]
     environment:
+      TASK: embedding
       MODEL_NAME: intfloat/e5-small-v2
       HF_HOME: /hf_cache
 
-  e5_large:
+  e5-large:
     <<: *model-embedding
     profiles: [topic]
     environment:
+      TASK: embedding
       MODEL_NAME: intfloat/e5-large-v2
       HF_HOME: /hf_cache
     healthcheck:
@@ -239,12 +254,13 @@ services:
     ports:
       - "8000:8000"
     environment:
-      LOG_LEVEL: INFO
+      LOG_LEVEL: DEBUG
       LOG_FORMAT: json
       VLLM_URL: ${LLM_URL:-http://vllm:8900}
       MAX_CONCURRENT_PER_REQUEST: 4
     volumes:
       - ./config.yaml:/app/config.yaml:ro
+      - ./discovered_labels.json:/app/discovered_labels.json
   # ── Frontend (nginx) ──────────────────────────────────────────────────────
 
   text-analysis-frontend:

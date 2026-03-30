@@ -2,6 +2,7 @@ import json
 
 import httpx
 import structlog
+from slugify import slugify
 
 from text_analysis.clients.base import ModelClient, ModelClientError, PredictionResult
 
@@ -31,25 +32,26 @@ SENTIMENT_VALID_LABELS: frozenset[str] = frozenset({"positive", "neutral", "nega
 TOPIC_SYSTEM_PROMPT = "You are a precise topic classifier that outputs only valid JSON."
 
 TOPIC_USER_PROMPT_TEMPLATE = """\
-Classify the topic of the text below. Return the top 3 most relevant topics ranked by confidence.
+Identify the 3 most relevant subject categories that best describe what the text is about — not its tone or style, but the real-world domain, activity, or event it refers to. A topic is a concise label for the subject matter, such as an industry, threat type, operational activity, or named phenomenon.
 
-Use one of these example slugs if it fits, or propose your own snake_case slug if none of them applies:
-arms_trafficking, financial_crime, surveillance_operation, human_intelligence,
-signals_intelligence, covert_operation, money_laundering, sanctions_evasion,
-recruitment, daily_reporting, network_configuration, routing, administrative,
-organizational_structure, spatial_context, temporal_reference
+Rules:
+- A domain is the professional or industry field the text belongs to (e.g. finance, medicine, cybersecurity).
+- Each label must be snake_case, max 2 words (e.g. wire_fraud, port_inspection).
+- Labels must be specific and precise — avoid generic terms like "activity" or "event".
+- At least one label must be a broad category-level topic that generalises the type of content (e.g. clinical_diagnosis, threat_assessment, financial_report) — not just a specific detail from the text.
+- These are illustrative examples only, do not copy them: financial_crime, cyber_intrusion, border_control.
 
 Respond with a JSON object containing exactly one field:
-- "labels": an array of exactly 3 objects, each with "label" (snake_case slug) and "score" (float 0.0–1.0), ranked from most to least confident
+- "labels": an array of exactly 3 objects, each with "label" (snake_case, max 2 words) and "score" (float 0.0–1.0), ranked from most to least confident
 
 Do not include any explanation or extra text — only the JSON object.
-
-Example output: {{"labels": [{{"label": "financial_crime", "score": 0.88}}, {{"label": "money_laundering", "score": 0.65}}, {{"label": "sanctions_evasion", "score": 0.42}}]}}
-
+{domain_line}
 Text: {text}"""
 
 class VllmClient(ModelClient):
     """Client for a vLLM server using the OpenAI-compatible chat completions API."""
+
+    _E5_SIMILARITY_THRESHOLD = 0.92
 
     def __init__(
         self,
@@ -61,6 +63,9 @@ class VllmClient(ModelClient):
         system_prompt: str = SENTIMENT_SYSTEM_PROMPT,
         user_prompt_template: str = SENTIMENT_USER_PROMPT_TEMPLATE,
         valid_labels: frozenset[str] = SENTIMENT_VALID_LABELS,
+        candidate_labels: list[str] | None = None,
+        candidate_store=None,
+        e5_small_url: str | None = None,
     ) -> None:
         self.model_name = model_name
         self.task = task
@@ -70,19 +75,61 @@ class VllmClient(ModelClient):
         self._system_prompt = system_prompt
         self._user_prompt_template = user_prompt_template
         self._valid_labels = valid_labels
+        self._candidate_labels = candidate_labels or []
+        self._candidate_store = candidate_store
+        self._e5_small_url = e5_small_url
 
-    async def _predict(self, text: str) -> PredictionResult:
+    async def _resolve_novel_labels(self, labels: list[tuple[str, float]], domain: str | None = None) -> list[tuple[str, float]]:
+        if not self._candidate_store or not self._e5_small_url:
+            return labels
+        resolved = []
+        candidates = self._candidate_store.all(domain=domain)
+        for label, score in labels:
+            if label in self._candidate_store:
+                resolved.append((label, score))
+                continue
+            # Novel label — run through e5-small to find nearest candidate
+            try:
+                resp = await self._http.post(
+                    f"{self._e5_small_url}/predict",
+                    json={"text": label, "candidate_labels": candidates},
+                    timeout=30.0,
+                )
+                resp.raise_for_status()
+                top = resp.json()["labels"][0]
+                if top["score"] >= self._E5_SIMILARITY_THRESHOLD:
+                    logger.info("vllm_label_mapped", novel=label, mapped=top["label"], similarity=top["score"])
+                    resolved.append((top["label"], score))
+                else:
+                    logger.info("vllm_label_new", label=label, top_similarity=top["score"])
+                    self._candidate_store.add(label, domain=domain)
+                    resolved.append((label, score))
+            except Exception as exc:
+                logger.warning("vllm_e5_lookup_failed", label=label, error=str(exc))
+                resolved.append((label, score))
+        return resolved
+
+    async def _predict(self, text: str, candidate_labels: list[str] | None = None, domain: str | None = None, **kwargs) -> PredictionResult:
         url = f"{self._base_url}/v1/chat/completions"
+        domain_line = f"Domain: {domain.capitalize()}\n" if domain else ""
         payload = {
             "model": self._model_id,
             "messages": [
                 {"role": "system", "content": self._system_prompt},
-                {"role": "user", "content": self._user_prompt_template.format(text=text)},
+                {"role": "user", "content": self._user_prompt_template.format(text=text, domain_line=domain_line)},
             ],
             "temperature": 0.0,
             "max_tokens": 200,
             "response_format": {"type": "json_object"},
         }
+
+        logger.debug(
+            "vllm_request",
+            model=self._model_id,
+            task=self.task,
+            domain=domain,
+            user_prompt=payload["messages"][1]["content"],
+        )
 
         try:
             response = await self._http.post(url, json=payload, timeout=120.0)
@@ -98,12 +145,19 @@ class VllmClient(ModelClient):
 
         try:
             body = response.json()
-            content: str = body["choices"][0]["message"]["content"]
+            content: str = body["choices"][0]["message"]["content"].strip()
+            if content.startswith("```"):
+                content = content.split("```", 2)[1]
+                if content.startswith("json"):
+                    content = content[4:]
+                content = content.strip()
             parsed: dict = json.loads(content)
         except (KeyError, IndexError, json.JSONDecodeError, ValueError, TypeError) as exc:
             raise ModelClientError(
                 f"Failed to parse vLLM response: {response.text!r}"
             ) from exc
+
+        logger.debug("vllm_response", model=self._model_id, task=self.task, content=content)
 
         if "labels" in parsed:
             # Topic mode — ranked list of {label, score}
@@ -114,7 +168,7 @@ class VllmClient(ModelClient):
                         f"vLLM returned empty labels list: {response.text!r}"
                     )
                 labels = [
-                    (item["label"].lower().strip(), max(0.0, min(1.0, float(item["score"]))))
+                    (slugify(item["label"], separator="_"), max(0.0, min(1.0, float(item["score"]))))
                     for item in raw_list
                 ]
             except ModelClientError:
@@ -123,6 +177,7 @@ class VllmClient(ModelClient):
                 raise ModelClientError(
                     f"Failed to parse vLLM labels list: {response.text!r}"
                 ) from exc
+            labels = await self._resolve_novel_labels(labels, domain=domain)
         else:
             # Sentiment mode — single {label, score}
             try:

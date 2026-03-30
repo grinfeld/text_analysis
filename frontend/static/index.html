@@ -120,7 +120,6 @@
       border-radius: 9999px;
       font-weight: 600;
       font-size: 0.8rem;
-      text-transform: capitalize;
     }
 
     .label-badge.positive { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
@@ -161,6 +160,20 @@
       <option value="topic">Topic</option>
     </select>
 
+    <label for="domain-select">Domain <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+    <select id="domain-select">
+      <option value="">— none —</option>
+      <option value="intelligence">Intelligence</option>
+      <option value="cybersecurity">Cybersecurity</option>
+      <option value="networking">Networking</option>
+      <option value="medicine">Medicine</option>
+      <option value="finance">Finance</option>
+      <option value="logistics">Logistics</option>
+      <option value="military">Military</option>
+      <option value="human_resources">Human Resources</option>
+      <option value="legal">Legal</option>
+    </select>
+
     <button id="submit-btn" onclick="analyse()">Analyse</button>
 
     <div id="results">
@@ -184,6 +197,7 @@
     async function analyse() {
       const text = document.getElementById("text-input").value.trim();
       const task = document.getElementById("task-select").value;
+      const domain = document.getElementById("domain-select").value;
       const btn = document.getElementById("submit-btn");
       const resultsDiv = document.getElementById("results");
       const tbody = document.getElementById("results-body");
@@ -203,7 +217,7 @@
         const resp = await fetch("/analyse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, for: task }),
+          body: JSON.stringify({ text, for: task, ...(domain ? { domain } : {}) }),
         });
 
         if (!resp.ok) {
@@ -237,7 +251,7 @@
       const rowspan = r.labels.length;
       return r.labels.map((item, i) => {
         const badgeClass = SENTIMENT_LABELS.has(item.label) ? item.label : "topic-label";
-        const badge = `<span class="label-badge ${badgeClass}">${item.label.replace(/_/g, " ")}</span>`;
+        const badge = `<span class="label-badge ${badgeClass}">${item.label}</span>`;
         const pct = (item.score * 100).toFixed(1) + "%";
         if (i === 0) {
           return `<tr>

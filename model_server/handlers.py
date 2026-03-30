@@ -45,11 +45,18 @@ class ZeroShotClassificationHandler(TaskHandler):
     def warmup(self) -> None:
         self._pipeline("warmup text", candidate_labels=["warmup"])
 
+    _CHUNK_SIZE = 20
+
     def predict(self, text: str, candidate_labels: list[str]) -> list[tuple[str, float]]:
         if not candidate_labels:
             raise ValueError("candidate_labels is required for zero-shot-classification")
-        result = self._pipeline(text, candidate_labels=candidate_labels)
-        return list(zip(result["labels"][:3], result["scores"][:3]))
+        scores: dict[str, float] = {}
+        for i in range(0, len(candidate_labels), self._CHUNK_SIZE):
+            chunk = candidate_labels[i:i + self._CHUNK_SIZE]
+            result = self._pipeline(text, candidate_labels=chunk)
+            scores.update(zip(result["labels"], result["scores"]))
+        top3 = sorted(scores.items(), key=lambda x: x[1], reverse=True)[:3]
+        return top3
 
 
 class EmbeddingHandler(TaskHandler):

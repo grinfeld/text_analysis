@@ -7,6 +7,8 @@ torch --index-url https://download.pytorch.org/whl/cpu
 # Embedding similarity
 sentence-transformers>=3.0.0
 numpy>=1.26.0
+# Label normalization
+python-slugify>=8.0.0
 # Lexicon tasks
 nltk>=3.8.0
 nrclex==2.0.2
