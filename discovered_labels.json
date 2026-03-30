@@ -1,14 +1,35 @@
 {
-  "medicine": [
-    "respiratory_issue",
-    "oxygen_administration",
-    "renal_disease"
+  "intelligence": [
+    "shipping",
+    "intelligence"
+  ],
+  "cybersecurity": [
+    "government_network",
+    "threat_actor"
   ],
   "logistics": [
     "inspection"
   ],
-  "intelligence": [
-    "shipping",
-    "intelligence"
+  "medicine": [
+    "respiratory_issue",
+    "respiratory_infection",
+    "infectious_disease",
+    "oxygen_administration",
+    "lab_test",
+    "blood_test",
+    "medication_management",
+    "cardiovascular_disease",
+    "pharmacotherapy",
+    "financial_transaction",
+    "wire_transfer",
+    "medical_payment"
+  ],
+  "finance": [
+    "account_activity",
+    "internal_investigation",
+    "corporate_governance"
+  ],
+  "legal": [
+    "legal_investigation"
   ]
 }

@@ -33,7 +33,7 @@ def init() -> None:
     enabled = settings.enabled_models.strip()
     if enabled != "*":
         enabled_set = {m.strip() for m in enabled.split(",")}
-        all_configs = [c for c in all_configs if c.name in enabled_set]
+        all_configs = [c for c in all_configs if c.type == "llm" or c.name in enabled_set]
 
     e5_small_url = settings.label_resolution_url or next(
         (c.url for c in all_configs if c.name == "intfloat/e5-small-v2"),
