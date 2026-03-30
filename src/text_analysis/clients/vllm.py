@@ -79,14 +79,14 @@ class VllmClient(ModelClient):
         self._candidate_store = candidate_store
         self._e5_small_url = e5_small_url
 
-    async def _resolve_novel_labels(self, labels: list[tuple[str, float]], domain: str | None = None) -> list[tuple[str, float]]:
+    async def _resolve_novel_labels(self, labels: list[tuple[str, float]], domain: str | None = None) -> list[tuple[str, float, str | None]]:
         if not self._candidate_store or not self._e5_small_url:
-            return labels
+            return [(label, score, None) for label, score in labels]
         resolved = []
         candidates = self._candidate_store.all(domain=domain)
         for label, score in labels:
             if label in self._candidate_store:
-                resolved.append((label, score))
+                resolved.append((label, score, None))
                 continue
             # Novel label — run through e5-small to find nearest candidate
             try:
@@ -99,14 +99,14 @@ class VllmClient(ModelClient):
                 top = resp.json()["labels"][0]
                 if top["score"] >= self._E5_SIMILARITY_THRESHOLD:
                     logger.info("vllm_label_mapped", novel=label, mapped=top["label"], similarity=top["score"])
-                    resolved.append((top["label"], score))
+                    resolved.append((top["label"], score, label))
                 else:
                     logger.info("vllm_label_new", label=label, top_similarity=top["score"])
                     self._candidate_store.add(label, domain=domain)
-                    resolved.append((label, score))
+                    resolved.append((label, score, None))
             except Exception as exc:
                 logger.warning("vllm_e5_lookup_failed", label=label, error=str(exc))
-                resolved.append((label, score))
+                resolved.append((label, score, None))
         return resolved
 
     async def _predict(self, text: str, candidate_labels: list[str] | None = None, domain: str | None = None, **kwargs) -> PredictionResult:
@@ -168,7 +168,7 @@ class VllmClient(ModelClient):
                         f"vLLM returned empty labels list: {response.text!r}"
                     )
                 labels = [
-                    (slugify(item["label"], separator="_"), max(0.0, min(1.0, float(item["score"]))))
+                    (slugify(item["label"], separator="_"), max(0.0, min(1.0, float(item["score"]))), None)
                     for item in raw_list
                 ]
             except ModelClientError:
@@ -177,7 +177,7 @@ class VllmClient(ModelClient):
                 raise ModelClientError(
                     f"Failed to parse vLLM labels list: {response.text!r}"
                 ) from exc
-            labels = await self._resolve_novel_labels(labels, domain=domain)
+            labels = await self._resolve_novel_labels([(l, s) for l, s, _ in labels], domain=domain)
         else:
             # Sentiment mode — single {label, score}
             try:
@@ -192,6 +192,6 @@ class VllmClient(ModelClient):
                 logger.warning("vllm_unknown_label", raw_label=raw_label, task=self.task, fallback="neutral")
                 label = "neutral"
             score = max(0.0, min(1.0, score))
-            labels = [(label, score)]
+            labels = [(label, score, None)]
 
         return PredictionResult(labels=labels, raw=body)

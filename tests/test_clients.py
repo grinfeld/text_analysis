@@ -139,7 +139,7 @@ class TestModelServerClient:
         result = await client.predict("Shell company transferred funds offshore.")
         assert result.label == "financial_crime"
         assert len(result.labels) == 3
-        assert result.labels[1] == ("money_laundering", pytest.approx(0.65))
+        assert result.labels[1] == ("money_laundering", pytest.approx(0.65), None)
 
 
 class TestVllmClient:
@@ -215,7 +215,7 @@ class TestVllmClient:
         result = await vllm_topic_client.predict("Shell company transferred funds offshore.")
         assert result.label == "financial_crime"
         assert len(result.labels) == 3
-        assert result.labels[1] == ("money_laundering", pytest.approx(0.65))
+        assert result.labels[1] == ("money_laundering", pytest.approx(0.65), None)
 
     @respx.mock
     async def test_missing_score_raises_client_error(self, vllm_client):

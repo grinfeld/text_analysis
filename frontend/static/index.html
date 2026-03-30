@@ -251,7 +251,8 @@
       const rowspan = r.labels.length;
       return r.labels.map((item, i) => {
         const badgeClass = SENTIMENT_LABELS.has(item.label) ? item.label : "topic-label";
-        const badge = `<span class="label-badge ${badgeClass}">${item.label}</span>`;
+        const labelText = item.original ? `${item.label} <span style="opacity:0.65;font-weight:400">(${item.original})</span>` : item.label;
+        const badge = `<span class="label-badge ${badgeClass}">${labelText}</span>`;
         const pct = (item.score * 100).toFixed(1) + "%";
         if (i === 0) {
           return `<tr>

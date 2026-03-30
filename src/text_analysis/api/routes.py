@@ -44,6 +44,7 @@ class AnalyseRequest(BaseModel):
 class LabelScore(BaseModel):
     label: str
     score: float
+    original: str | None = None
 
 
 class ModelResult(BaseModel):
@@ -71,7 +72,7 @@ async def _call_client(
             latency_s = time.perf_counter() - start
             return ModelResult(
                 model=client.model_name,
-                labels=[LabelScore(label=l, score=round(s, 2)) for l, s in result.labels],
+                labels=[LabelScore(label=l, score=round(s, 2), original=o) for l, s, o in result.labels],
                 latency_s=round(latency_s, 4),
             )
         except ModelClientError as exc:

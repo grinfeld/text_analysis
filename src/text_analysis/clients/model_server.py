@@ -60,7 +60,7 @@ class ModelServerClient(ModelClient):
                     f"Empty labels list from {url}: {response.text!r}"
                 )
             labels = [
-                (self._normalise_label(item["label"]), float(item["score"]))
+                (self._normalise_label(item["label"]), float(item["score"]), None)
                 for item in raw_labels
             ]
         except ModelClientError:
