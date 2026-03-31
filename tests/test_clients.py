@@ -141,6 +141,34 @@ class TestModelServerClient:
         assert len(result.labels) == 3
         assert result.labels[1] == ("money_laundering", pytest.approx(0.65), None)
 
+    @respx.mock
+    async def test_source_relation_target_concatenated_with_text(self, siebert_client):
+        captured = {}
+
+        async def capture(request):
+            captured["body"] = request.read()
+            return _ms_response([{"label": "POSITIVE", "score": 0.9}])
+
+        respx.post("http://siebert:8000/predict").mock(side_effect=capture)
+        await siebert_client.predict("some text", source="Russia", relation="attacked", target="Ukraine")
+        import json as _json
+        sent = _json.loads(captured["body"])
+        assert sent["text"] == "Russia attacked Ukraine some text"
+
+    @respx.mock
+    async def test_partial_entity_fields_concatenated(self, siebert_client):
+        captured = {}
+
+        async def capture(request):
+            captured["body"] = request.read()
+            return _ms_response([{"label": "POSITIVE", "score": 0.9}])
+
+        respx.post("http://siebert:8000/predict").mock(side_effect=capture)
+        await siebert_client.predict("details here", source="APT28")
+        import json as _json
+        sent = _json.loads(captured["body"])
+        assert sent["text"] == "APT28 details here"
+
 
 class TestVllmClient:
     def _make_vllm_response(self, label: str, score: float) -> httpx.Response:

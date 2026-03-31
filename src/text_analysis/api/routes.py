@@ -4,7 +4,7 @@ from typing import Literal
 
 import structlog
 from fastapi import APIRouter
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from text_analysis.clients.base import ModelClientError
 import text_analysis.config as _config
@@ -19,16 +19,18 @@ router = APIRouter()
 class AnalyseRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
-    text: str
+    text: str = Field("")
     for_: Literal["sentiment", "topic"] = Field("sentiment", alias="for")
     domain: str | None = Field(None)
+    source: str | None = Field(None)
+    relation: str | None = Field(None)
+    target: str | None = Field(None)
 
-    @field_validator("text")
-    @classmethod
-    def text_must_not_be_blank(cls, v: str) -> str:
-        if not v.strip():
-            raise ValueError("text must not be empty or whitespace")
-        return v
+    @model_validator(mode="after")
+    def at_least_one_field_must_be_set(self) -> "AnalyseRequest":
+        if not any([self.text.strip(), self.source, self.relation, self.target]):
+            raise ValueError("at least one of text, source, relation, or target must be provided")
+        return self
 
     @field_validator("domain")
     @classmethod
@@ -64,11 +66,15 @@ async def _call_client(
     sem: asyncio.Semaphore,
     candidate_labels: list[str] | None = None,
     domain: str | None = None,
+    source: str | None = None,
+    relation: str | None = None,
+    target: str | None = None,
 ) -> ModelResult:
     async with sem:
         start = time.perf_counter()
         try:
-            result = await client.predict(text, candidate_labels=candidate_labels, domain=domain)
+            result = await client.predict(text, candidate_labels=candidate_labels, domain=domain,
+                                          source=source, relation=relation, target=target)
             latency_s = time.perf_counter() - start
             return ModelResult(
                 model=client.model_name,
@@ -113,6 +119,7 @@ async def analyse(req: AnalyseRequest) -> AnalyseResponse:
     clients = get_clients_for(req.for_)
     sem = asyncio.Semaphore(settings.max_concurrent_per_request)
     results = await asyncio.gather(
-        *[_call_client(client, req.text, sem, candidate_labels=candidate_override, domain=req.domain) for client in clients]
+        *[_call_client(client, req.text, sem, candidate_labels=candidate_override, domain=req.domain,
+                       source=req.source, relation=req.relation, target=req.target) for client in clients]
     )
     return AnalyseResponse(results=list(results))

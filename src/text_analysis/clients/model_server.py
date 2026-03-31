@@ -34,10 +34,14 @@ class ModelServerClient(ModelClient):
             return "neutral"
         return normalised
 
-    async def _predict(self, text: str, candidate_labels: list[str] | None = None, **kwargs) -> PredictionResult:
+    async def _predict(self, text: str, candidate_labels: list[str] | None = None,
+                       source: str | None = None, relation: str | None = None, target: str | None = None,
+                       **kwargs) -> PredictionResult:
         url = f"{self._base_url}/predict"
         effective_labels = candidate_labels if candidate_labels is not None else self._candidate_labels
-        payload: dict = {"text": text}
+        parts = [p for p in [source, relation, target, text] if p]
+        combined_text = " ".join(parts)
+        payload: dict = {"text": combined_text}
         if effective_labels:
             payload["candidate_labels"] = effective_labels
         try:

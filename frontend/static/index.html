@@ -60,7 +60,7 @@
       min-height: 120px;
     }
 
-    textarea:focus, select:focus { border-color: #6366f1; }
+    textarea:focus, select:focus, input[type="text"]:focus { border-color: #6366f1; }
 
     button {
       width: 100%;
@@ -160,19 +160,36 @@
       <option value="topic">Topic</option>
     </select>
 
-    <label for="domain-select">Domain <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
-    <select id="domain-select">
-      <option value="">— none —</option>
-      <option value="intelligence">Intelligence</option>
-      <option value="cybersecurity">Cybersecurity</option>
-      <option value="networking">Networking</option>
-      <option value="medicine">Medicine</option>
-      <option value="finance">Finance</option>
-      <option value="logistics">Logistics</option>
-      <option value="military">Military</option>
-      <option value="human_resources">Human Resources</option>
-      <option value="legal">Legal</option>
-    </select>
+    <div id="topic-fields" style="display:none">
+      <label for="domain-select">Domain <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+      <select id="domain-select">
+        <option value="">— none —</option>
+        <option value="intelligence">Intelligence</option>
+        <option value="cybersecurity">Cybersecurity</option>
+        <option value="networking">Networking</option>
+        <option value="medicine">Medicine</option>
+        <option value="finance">Finance</option>
+        <option value="logistics">Logistics</option>
+        <option value="military">Military</option>
+        <option value="human_resources">Human Resources</option>
+        <option value="legal">Legal</option>
+      </select>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.75rem;margin-bottom:1rem">
+        <div>
+          <label for="source-input">Source <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+          <input type="text" id="source-input" placeholder="e.g. Russia" style="width:100%;padding:0.6rem 0.8rem;border:1px solid #d1d5db;border-radius:8px;font-size:0.95rem;color:#111;background:#fff;outline:none;transition:border-color 0.15s;font-family:inherit" />
+        </div>
+        <div>
+          <label for="relation-input">Relation <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+          <input type="text" id="relation-input" placeholder="e.g. attacked" style="width:100%;padding:0.6rem 0.8rem;border:1px solid #d1d5db;border-radius:8px;font-size:0.95rem;color:#111;background:#fff;outline:none;transition:border-color 0.15s;font-family:inherit" />
+        </div>
+        <div>
+          <label for="target-input">Target <span style="color:#9ca3af;font-weight:400">(optional)</span></label>
+          <input type="text" id="target-input" placeholder="e.g. Ukraine" style="width:100%;padding:0.6rem 0.8rem;border:1px solid #d1d5db;border-radius:8px;font-size:0.95rem;color:#111;background:#fff;outline:none;transition:border-color 0.15s;font-family:inherit" />
+        </div>
+      </div>
+    </div>
 
     <button id="submit-btn" onclick="analyse()">Analyse</button>
 
@@ -194,16 +211,26 @@
   <script>
     const SENTIMENT_LABELS = new Set(["positive", "negative", "neutral"]);
 
+    function updateTopicFields() {
+      const isTopics = document.getElementById("task-select").value === "topic";
+      document.getElementById("topic-fields").style.display = isTopics ? "block" : "none";
+    }
+    document.getElementById("task-select").addEventListener("change", updateTopicFields);
+    updateTopicFields();
+
     async function analyse() {
       const text = document.getElementById("text-input").value.trim();
       const task = document.getElementById("task-select").value;
       const domain = document.getElementById("domain-select").value;
+      const source = document.getElementById("source-input").value.trim();
+      const relation = document.getElementById("relation-input").value.trim();
+      const target = document.getElementById("target-input").value.trim();
       const btn = document.getElementById("submit-btn");
       const resultsDiv = document.getElementById("results");
       const tbody = document.getElementById("results-body");
 
-      if (!text) {
-        tbody.innerHTML = `<tr><td colspan="4" class="error-msg" style="padding:0.65rem 0.6rem">Please enter some text.</td></tr>`;
+      if (!text && !source && !relation && !target) {
+        tbody.innerHTML = `<tr><td colspan="4" class="error-msg" style="padding:0.65rem 0.6rem">Please enter at least one of: text, source, relation, or target.</td></tr>`;
         resultsDiv.style.display = "block";
         return;
       }
@@ -217,7 +244,14 @@
         const resp = await fetch("/analyse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, for: task, ...(domain ? { domain } : {}) }),
+          body: JSON.stringify({
+            text,
+            for: task,
+            ...(domain ? { domain } : {}),
+            ...(task === "topic" && source ? { source } : {}),
+            ...(task === "topic" && relation ? { relation } : {}),
+            ...(task === "topic" && target ? { target } : {}),
+          }),
         });
 
         if (!resp.ok) {

@@ -425,3 +425,35 @@ class TestDomainField:
         # Full list — both cybersecurity and finance slugs present
         assert "malware" in sent["candidate_labels"]
         assert "financial_crime" in sent["candidate_labels"]
+
+    @respx.mock
+    def test_source_relation_target_in_vllm_prompt(self, client):
+        """source, relation, and target values appear in the vLLM prompt context and rule lines."""
+        captured = {}
+
+        async def capture_vllm(request):
+            captured["body"] = request.content
+            content = json.dumps({"labels": [{"label": l, "score": s} for l, s in _TOP3]})
+            return httpx.Response(200, json={"choices": [{"message": {"content": content}}]})
+
+        for host in ["deberta", "deberta-large", "nli-deberta", "bart",
+                     "bge-small", "bge-large", "minilm", "mpnet", "e5-small", "e5-large"]:
+            respx.post(f"http://{host}:8000/predict").mock(return_value=_ms_top3(_TOP3))
+        respx.post("http://localhost:8900/v1/chat/completions").mock(side_effect=capture_vllm)
+
+        resp = client.post("/analyse", json={
+            "text": "Russia attacked Ukraine infrastructure.",
+            "for": "topic",
+            "source": "Russia",
+            "relation": "attacked",
+            "target": "Ukraine",
+        })
+        assert resp.status_code == 200
+        import json as _json
+        body = _json.loads(captured["body"])
+        user_content = body["messages"][1]["content"]
+        assert 'source/subject: "Russia"' in user_content
+        assert 'relation: "attacked"' in user_content
+        assert 'object/target: "Ukraine"' in user_content
+        assert '"Russia"' in user_content
+        assert '"Ukraine"' in user_content
